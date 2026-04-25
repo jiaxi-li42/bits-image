@@ -60,9 +60,6 @@ export async function updateImageMeta(
     })
     .where(eq(schema.images.id, id));
 
-  revalidatePath("/library");
-  revalidatePath("/inbox");
-  revalidatePath("/organised");
-  revalidatePath("/trash");
+  revalidatePath("/", "layout");
   return { status: "ok" };
 }

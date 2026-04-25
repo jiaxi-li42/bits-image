@@ -16,7 +16,13 @@ import {
 import { cn } from "@/lib/utils";
 import { ingestFile } from "./server";
 
-export function UploadButton() {
+export function UploadButton({
+  folderId,
+  tagId,
+}: {
+  folderId?: string;
+  tagId?: string;
+} = {}) {
   const [open, setOpen] = useState(false);
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -35,7 +41,11 @@ export function UploadButton() {
             Drag-drop or pick files. Duplicates are skipped automatically.
           </DialogDescription>
         </DialogHeader>
-        <UploadDropzone onDone={() => setOpen(false)} />
+        <UploadDropzone
+          onDone={() => setOpen(false)}
+          folderId={folderId}
+          tagId={tagId}
+        />
       </DialogContent>
     </Dialog>
   );
@@ -50,7 +60,15 @@ type Entry = {
   message?: string;
 };
 
-function UploadDropzone({ onDone }: { onDone: () => void }) {
+function UploadDropzone({
+  onDone,
+  folderId,
+  tagId,
+}: {
+  onDone: () => void;
+  folderId?: string;
+  tagId?: string;
+}) {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [pending, startTransition] = useTransition();
 
@@ -83,6 +101,8 @@ function UploadDropzone({ onDone }: { onDone: () => void }) {
         );
         const fd = new FormData();
         fd.append("file", entry.file);
+        if (folderId) fd.append("folderId", folderId);
+        if (tagId) fd.append("tagId", tagId);
         try {
           const res = await ingestFile(fd);
           if (res.status === "ok") {

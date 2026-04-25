@@ -1,5 +1,7 @@
 export type ViewKind = "library" | "inbox" | "organised" | "trash";
 
+export type TagFilterMode = "and" | "or";
+
 export type GridImage = {
   id: string;
   hash: string;

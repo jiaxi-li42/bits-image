@@ -6,10 +6,7 @@ import { db, schema } from "@/db/client";
 import { deleteAllForHash, getOriginalUrl } from "@/modules/storage";
 
 function revalidateAllViews() {
-  revalidatePath("/library");
-  revalidatePath("/inbox");
-  revalidatePath("/organised");
-  revalidatePath("/trash");
+  revalidatePath("/", "layout");
 }
 
 export async function softDeleteImage(id: string): Promise<void> {

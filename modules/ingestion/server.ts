@@ -5,6 +5,8 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/db/client";
 import { uploadImage, deleteAllForHash } from "@/modules/storage";
+import { addImageToFolder } from "@/modules/folders";
+import { assignTag } from "@/modules/tags";
 
 export type IngestResult =
   | { status: "ok"; imageId: string }
@@ -12,10 +14,7 @@ export type IngestResult =
   | { status: "error"; message: string };
 
 async function revalidateAllViews() {
-  revalidatePath("/library");
-  revalidatePath("/inbox");
-  revalidatePath("/organised");
-  revalidatePath("/trash");
+  revalidatePath("/", "layout");
 }
 
 export async function ingestFile(formData: FormData): Promise<IngestResult> {
@@ -49,8 +48,17 @@ export async function ingestFile(formData: FormData): Promise<IngestResult> {
     .where(eq(schema.images.hash, uploaded.hash))
     .get();
 
+  const folderId = formData.get("folderId");
+  const tagId = formData.get("tagId");
+
   if (existing) {
     // Note: R2 put was idempotent (same key from hash). Nothing to roll back.
+    if (typeof folderId === "string" && folderId) {
+      await addImageToFolder(existing.id, folderId).catch(() => {});
+    }
+    if (typeof tagId === "string" && tagId) {
+      await assignTag(existing.id, tagId).catch(() => {});
+    }
     return { status: "duplicate", existingId: existing.id };
   }
 
@@ -68,6 +76,17 @@ export async function ingestFile(formData: FormData): Promise<IngestResult> {
     console.error("db insert failed, rolling back R2:", err);
     await deleteAllForHash(uploaded.hash).catch(() => {});
     return { status: "error", message: "Database insert failed" };
+  }
+
+  if (typeof folderId === "string" && folderId) {
+    await addImageToFolder(id, folderId).catch((err) => {
+      console.warn("addImageToFolder after ingest failed:", err);
+    });
+  }
+  if (typeof tagId === "string" && tagId) {
+    await assignTag(id, tagId).catch((err) => {
+      console.warn("assignTag after ingest failed:", err);
+    });
   }
 
   await revalidateAllViews();

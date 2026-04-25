@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { MasonryPhotoAlbum, type Photo } from "react-photo-album";
 import "react-photo-album/masonry.css";
 import { loadMore } from "./actions";
-import type { GridImage, ViewKind } from "./types";
+import type { GridImage, TagFilterMode, ViewKind } from "./types";
 import { Viewer } from "@/modules/viewer";
 import { ImageActionsMenu } from "@/modules/actions";
 
@@ -12,6 +12,10 @@ export type GridProps = {
   view: ViewKind;
   initialItems: GridImage[];
   initialCursor: string | null;
+  tagIds?: string[];
+  tagMode?: TagFilterMode;
+  query?: string;
+  folderId?: string;
 };
 
 type GridPhoto = Photo & { id: string; hash: string };
@@ -27,12 +31,17 @@ function toPhoto(i: GridImage): GridPhoto {
   };
 }
 
-export function Grid({ view, initialItems, initialCursor }: GridProps) {
+export function Grid({ view, initialItems, initialCursor, tagIds, tagMode, query, folderId }: GridProps) {
   const [items, setItems] = useState<GridImage[]>(initialItems);
   const [cursor, setCursor] = useState<string | null>(initialCursor);
   const [pending, startTransition] = useTransition();
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setItems(initialItems);
+    setCursor(initialCursor);
+  }, [initialItems, initialCursor]);
 
   const photos = items.map(toPhoto);
 
@@ -40,11 +49,11 @@ export function Grid({ view, initialItems, initialCursor }: GridProps) {
     if (!cursor || pending) return;
     const c = cursor;
     startTransition(async () => {
-      const res = await loadMore({ view, cursor: c });
+      const res = await loadMore({ view, cursor: c, tagIds, tagMode, query, folderId });
       setItems((prev) => [...prev, ...res.items]);
       setCursor(res.nextCursor);
     });
-  }, [cursor, pending, view]);
+  }, [cursor, pending, view, tagIds, tagMode, query, folderId]);
 
   useEffect(() => {
     if (!cursor) return;
@@ -76,8 +85,8 @@ export function Grid({ view, initialItems, initialCursor }: GridProps) {
                 role="button"
                 tabIndex={0}
                 style={style}
-                className={className}
-                onClick={onClick}
+                className={`${className ?? ""} group relative`}
+                onClick={onClick as unknown as React.MouseEventHandler<HTMLDivElement>}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
@@ -92,6 +101,7 @@ export function Grid({ view, initialItems, initialCursor }: GridProps) {
               <div
                 className="absolute top-1 right-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100"
                 onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => e.stopPropagation()}
               >
                 <ImageActionsMenu
                   imageId={(photo as GridPhoto).id}
@@ -102,11 +112,6 @@ export function Grid({ view, initialItems, initialCursor }: GridProps) {
                     }
                   }}
                 />
-              </div>
-            ),
-            wrapper: ({ children, ...rest }) => (
-              <div {...rest} className="group relative">
-                {children}
               </div>
             ),
           }}

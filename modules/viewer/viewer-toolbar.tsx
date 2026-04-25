@@ -155,6 +155,8 @@ export function ViewerToolbar({
           imageId={image.id}
           open={detailsOpen}
           onOpenChange={setDetailsOpen}
+          view={view}
+          onRemoved={() => onRemoved(image.id)}
         />
       ) : null}
     </div>

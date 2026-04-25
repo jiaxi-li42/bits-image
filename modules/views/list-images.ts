@@ -1,17 +1,42 @@
 import "server-only";
-import { and, desc, isNull, isNotNull, lt, sql, inArray, notInArray } from "drizzle-orm";
+import { and, desc, eq, isNull, isNotNull, sql, inArray, notInArray } from "drizzle-orm";
 import { db, schema } from "@/db/client";
-import { type ViewKind, type ListImagesResult, PAGE_SIZE } from "./types";
+import { searchImageIds } from "@/modules/search/server";
+import { type ViewKind, type ListImagesResult, type TagFilterMode, PAGE_SIZE } from "./types";
 
 export async function listImages({
   view,
   cursor,
   limit = PAGE_SIZE,
+  tagIds,
+  tagMode = "and",
+  query,
+  folderId,
 }: {
   view: ViewKind;
   cursor?: string | null;
   limit?: number;
+  tagIds?: string[];
+  tagMode?: TagFilterMode;
+  query?: string;
+  folderId?: string;
 }): Promise<ListImagesResult> {
+  let searchPredicate;
+  if (query && query.trim()) {
+    const ids = await searchImageIds(query);
+    if (ids.length === 0) return { items: [], nextCursor: null };
+    searchPredicate = inArray(schema.images.id, ids);
+  }
+
+  let folderPredicate;
+  if (folderId) {
+    const sub = db
+      .select({ imageId: schema.imageFolders.imageId })
+      .from(schema.imageFolders)
+      .where(eq(schema.imageFolders.folderId, folderId));
+    folderPredicate = inArray(schema.images.id, sub);
+  }
+
   const deletedPredicate =
     view === "trash" ? isNotNull(schema.images.deletedAt) : isNull(schema.images.deletedAt);
 
@@ -25,6 +50,26 @@ export async function listImages({
       : view === "organised"
         ? inArray(schema.images.id, taggedSubquery)
         : undefined;
+
+  const cleanTagIds = (tagIds ?? []).filter(Boolean);
+  let tagFilterPredicate;
+  if (cleanTagIds.length > 0) {
+    if (tagMode === "or") {
+      const sub = db
+        .select({ imageId: schema.imageTags.imageId })
+        .from(schema.imageTags)
+        .where(inArray(schema.imageTags.tagId, cleanTagIds));
+      tagFilterPredicate = inArray(schema.images.id, sub);
+    } else {
+      const sub = db
+        .select({ imageId: schema.imageTags.imageId })
+        .from(schema.imageTags)
+        .where(inArray(schema.imageTags.tagId, cleanTagIds))
+        .groupBy(schema.imageTags.imageId)
+        .having(sql`count(distinct ${schema.imageTags.tagId}) = ${cleanTagIds.length}`);
+      tagFilterPredicate = inArray(schema.images.id, sub);
+    }
+  }
 
   // Cursor: encoded as `${createdAt_ms}_${id}`. Rows with createdAt < cursor.createdAt,
   // or equal createdAt but id < cursor.id, lexicographic on (createdAt desc, id desc).
@@ -40,6 +85,9 @@ export async function listImages({
   const where = and(
     deletedPredicate,
     ...(tagPredicate ? [tagPredicate] : []),
+    ...(tagFilterPredicate ? [tagFilterPredicate] : []),
+    ...(searchPredicate ? [searchPredicate] : []),
+    ...(folderPredicate ? [folderPredicate] : []),
     ...(cursorPredicate ? [cursorPredicate] : []),
   );
 

@@ -6,6 +6,7 @@ import {
   primaryKey,
   index,
   uniqueIndex,
+  type AnySQLiteColumn,
 } from "drizzle-orm/sqlite-core";
 
 export const images = sqliteTable(
@@ -60,7 +61,43 @@ export const imageTags = sqliteTable(
   ],
 );
 
+export const folders = sqliteTable(
+  "folders",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    parentId: text("parent_id").references((): AnySQLiteColumn => folders.id, {
+      onDelete: "cascade",
+    }),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .default(sql`(unixepoch() * 1000)`),
+  },
+  (t) => [
+    uniqueIndex("folders_name_parent_idx").on(t.name, t.parentId),
+    index("folders_parent_idx").on(t.parentId),
+  ],
+);
+
+export const imageFolders = sqliteTable(
+  "image_folders",
+  {
+    imageId: text("image_id")
+      .notNull()
+      .references(() => images.id, { onDelete: "cascade" }),
+    folderId: text("folder_id")
+      .notNull()
+      .references(() => folders.id, { onDelete: "cascade" }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.imageId, t.folderId] }),
+    index("image_folders_folder_idx").on(t.folderId),
+  ],
+);
+
 export type Image = typeof images.$inferSelect;
 export type NewImage = typeof images.$inferInsert;
 export type Tag = typeof tags.$inferSelect;
 export type NewTag = typeof tags.$inferInsert;
+export type Folder = typeof folders.$inferSelect;
+export type NewFolder = typeof folders.$inferInsert;
