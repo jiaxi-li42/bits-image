@@ -1,11 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { Check } from "lucide-react";
 import { MasonryPhotoAlbum, type Photo } from "react-photo-album";
 import "react-photo-album/masonry.css";
 import { loadMore } from "./actions";
 import type { GridImage, TagFilterMode, ViewKind } from "./types";
 import { Viewer } from "@/modules/viewer";
+import { useManage } from "@/modules/manage";
 
 export type GridProps = {
   view: ViewKind;
@@ -45,6 +47,7 @@ export function Grid({
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
+  const manage = useManage();
 
   useEffect(() => {
     setItems(initialItems);
@@ -84,8 +87,11 @@ export function Grid({
     return () => obs.disconnect();
   }, [cursor, loadNext]);
 
-  // Click anywhere on the page (other than a photo card) deselects.
+  // Click anywhere on the page (other than a photo card) deselects the
+  // single-select highlight. Skipped while Manage mode is on so bulk
+  // selection isn't wiped by clicking sidebar / toolbar / panel.
   useEffect(() => {
+    if (manage.isManaging) return;
     if (!selectedId) return;
     const onDocClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement | null;
@@ -104,7 +110,7 @@ export function Grid({
     };
     document.addEventListener("click", onDocClick);
     return () => document.removeEventListener("click", onDocClick);
-  }, [selectedId]);
+  }, [selectedId, manage.isManaging]);
 
   if (items.length === 0) return null;
 
@@ -132,20 +138,30 @@ export function Grid({
 
   return (
     <>
-      <div className="px-4 py-4 md:px-6">
+      <div
+        className={`px-4 py-4 md:px-6 ${manage.isManaging ? "pb-24" : ""}`}
+      >
         <MasonryPhotoAlbum
           photos={photos}
           columns={(w) => (w < 540 ? 2 : w < 900 ? 3 : w < 1300 ? 4 : 5)}
           spacing={8}
           onClick={({ index }) => {
             const photo = photos[index];
-            if (photo) setSelectedId(photo.id);
+            if (!photo) return;
+            if (manage.isManaging) {
+              manage.toggle(photo.id);
+              return;
+            }
+            setSelectedId(photo.id);
             setViewerIndex(index);
           }}
           render={{
             button: ({ onClick, style, className, children }, context) => {
               const photo = context?.photo as GridPhoto | undefined;
-              const isSelected = !!photo && selectedId === photo.id;
+              const isMulti = !!photo && manage.isSelected(photo.id);
+              const isSingle =
+                !manage.isManaging && !!photo && selectedId === photo.id;
+              const isSelected = isMulti || isSingle;
               return (
                 <div
                   role="button"
@@ -170,6 +186,18 @@ export function Grid({
                   aria-pressed={isSelected}
                 >
                   {children}
+                  {manage.isManaging ? (
+                    <span
+                      aria-hidden
+                      className={`pointer-events-none absolute top-2 right-2 flex size-6 items-center justify-center rounded-full border ${
+                        isMulti
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-foreground/40 bg-background/80"
+                      }`}
+                    >
+                      {isMulti ? <Check className="size-3.5" /> : null}
+                    </span>
+                  ) : null}
                 </div>
               );
             },

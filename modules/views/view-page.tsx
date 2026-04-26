@@ -4,6 +4,7 @@ import { TrashEmptyButton } from "@/modules/actions";
 import { SearchBar } from "@/modules/search";
 import { FolderHeaderActions } from "@/modules/folders/folder-header-actions";
 import { TagFilterBar, TagHeaderActions } from "@/modules/tags";
+import { ManageProvider, ManageBar, ManagePanel } from "@/modules/manage";
 import { listImages } from "./list-images";
 import { Grid } from "./grid";
 import type { TagFilterMode, ViewKind } from "./types";
@@ -102,45 +103,50 @@ export async function ViewPage({
   }
 
   return (
-    <div className="flex min-h-dvh flex-col">
-      <ViewHeader
-        title={title}
-        description={description}
-        actions={
-          <>
-            <SearchBar />
-            {folder ? <FolderHeaderActions folder={folder} /> : null}
-            {tag ? <TagHeaderActions tag={tag} /> : null}
-            {view === "trash" && items.length > 0 ? (
-              <TrashEmptyButton />
-            ) : view !== "trash" ? (
-              <UploadButton
-                folderId={folder?.id}
-                tagId={tag?.id}
-              />
-            ) : null}
-          </>
-        }
-      />
-      {showTagFilter ? <TagFilterBar excludeTagId={tag?.id} /> : null}
-      {items.length === 0 ? (
-        <EmptyState
-          title={isFiltered ? "No matches" : emptyTitle}
-          description={
-            isFiltered ? "No images match the current filter." : emptyBody
+    <ManageProvider>
+      <div className="flex min-h-dvh flex-col">
+        <ViewHeader
+          title={title}
+          description={description}
+          actions={
+            <>
+              <SearchBar />
+              {folder ? <FolderHeaderActions folder={folder} /> : null}
+              {tag ? <TagHeaderActions tag={tag} /> : null}
+              {view === "trash" && items.length > 0 ? (
+                <TrashEmptyButton />
+              ) : view !== "trash" ? (
+                <UploadButton folderId={folder?.id} tagId={tag?.id} />
+              ) : null}
+            </>
           }
         />
-      ) : (
-        <Grid
-          view={view}
-          initialItems={items}
-          initialCursor={nextCursor}
-          tagIds={effectiveTagIds}
-          tagMode={effectiveMode}
-          query={query}
-          folderId={folder?.id}
-        />
-      )}
-    </div>
+        {/* Toolbar row: filter (where applicable) + Manage toggle. Always
+            renders so the Manage button is reachable in every view. */}
+        <div className="flex flex-wrap items-center gap-2 border-b px-4 py-2 md:px-6">
+          {showTagFilter ? <TagFilterBar excludeTagId={tag?.id} /> : null}
+          <ManageBar />
+        </div>
+        {items.length === 0 ? (
+          <EmptyState
+            title={isFiltered ? "No matches" : emptyTitle}
+            description={
+              isFiltered ? "No images match the current filter." : emptyBody
+            }
+          />
+        ) : (
+          <Grid
+            view={view}
+            initialItems={items}
+            initialCursor={nextCursor}
+            tagIds={effectiveTagIds}
+            tagMode={effectiveMode}
+            query={query}
+            folderId={folder?.id}
+          />
+        )}
+      </div>
+      <ManagePanel view={view} />
+    </ManageProvider>
   );
 }

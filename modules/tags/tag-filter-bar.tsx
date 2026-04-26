@@ -83,7 +83,7 @@ export function TagFilterBar({ excludeTagId }: { excludeTagId?: string }) {
   if (visibleTags.length === 0 && selected.length === 0) return null;
 
   return (
-    <div className="flex flex-wrap items-center gap-2 border-b px-4 py-2 md:px-6">
+    <>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger
           render={
@@ -173,6 +173,6 @@ export function TagFilterBar({ excludeTagId }: { excludeTagId?: string }) {
           Clear
         </Button>
       ) : null}
-    </div>
+    </>
   );
 }
