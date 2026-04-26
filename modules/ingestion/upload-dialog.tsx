@@ -182,7 +182,9 @@ function UploadDropzone({
               key={e.id}
               className="flex items-center justify-between gap-3 border-b px-3 py-2 last:border-b-0"
             >
-              <span className="truncate">{e.file.name}</span>
+              <span className="min-w-0 flex-1 truncate" title={e.file.name}>
+                {e.file.name}
+              </span>
               <span
                 className={cn(
                   "shrink-0 text-xs",
