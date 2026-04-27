@@ -6,11 +6,19 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Input } from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
 import { listTags, type TagWithCount } from "@/modules/tags";
 import {
   applyTagDiffToImages,
@@ -21,8 +29,7 @@ import { useManage } from "./manage-context";
 
 type Tri = "all" | "some" | "none";
 
-function deriveInitial(tag: TagWithCount, stat: TagStateForImages | undefined, total: number): Tri {
-  void tag;
+function deriveInitial(stat: TagStateForImages | undefined, total: number): Tri {
   if (!stat || stat.count === 0) return "none";
   if (stat.count >= total) return "all";
   return "some";
@@ -36,7 +43,6 @@ export function EditTagsAction() {
   const [current, setCurrent] = useState<Map<string, Tri>>(new Map());
   const [loading, setLoading] = useState(false);
   const [pending, startTransition] = useTransition();
-  const [filter, setFilter] = useState("");
 
   const ids = useMemo(() => Array.from(selected), [selected]);
   const total = ids.length;
@@ -50,7 +56,7 @@ export function EditTagsAction() {
         if (cancelled) return;
         const byId = new Map(stats.map((s) => [s.id, s]));
         const map = new Map<string, Tri>();
-        for (const t of tags) map.set(t.id, deriveInitial(t, byId.get(t.id), total));
+        for (const t of tags) map.set(t.id, deriveInitial(byId.get(t.id), total));
         setAllTags(tags);
         setInitial(map);
         setCurrent(new Map(map));
@@ -65,14 +71,11 @@ export function EditTagsAction() {
   const cycle = (tagId: string) => {
     setCurrent((prev) => {
       const next = new Map(prev);
-      // For tri-state UX: clicking either applies to all (-> "all") or
-      // unapplies from all (-> "none"). "some" only exists as the initial
-      // mixed state — clicking flips it to "all" first; clicking again
-      // moves to "none".
+      // Tri-state UX: clicking either applies to all (-> "all") or unapplies
+      // from all (-> "none"). "some" only exists as the initial mixed state;
+      // clicking it flips to "all" first, then "none".
       const cur = next.get(tagId) ?? "none";
-      if (cur === "none") next.set(tagId, "all");
-      else if (cur === "all") next.set(tagId, "none");
-      else next.set(tagId, "all");
+      next.set(tagId, cur === "all" ? "none" : "all");
       return next;
     });
   };
@@ -84,10 +87,7 @@ export function EditTagsAction() {
       const i = initial.get(tagId) ?? "none";
       if (c === i) continue;
       if (c === "all") add.push(tagId);
-      else if (c === "none") {
-        // From "all" -> "none" or "some" -> "none": remove from all selected.
-        remove.push(tagId);
-      }
+      else if (c === "none") remove.push(tagId);
     }
     if (add.length === 0 && remove.length === 0) {
       setOpen(false);
@@ -95,19 +95,11 @@ export function EditTagsAction() {
     }
     startTransition(async () => {
       await applyTagDiffToImages(ids, add, remove);
-      toast(
-        `Tags updated on ${total} ${total === 1 ? "photo" : "photos"}`,
-      );
+      toast(`Tags updated on ${total} ${total === 1 ? "photo" : "photos"}`);
       setOpen(false);
       clear();
     });
   };
-
-  const filtered = useMemo(() => {
-    const q = filter.trim().toLowerCase();
-    if (!q) return allTags;
-    return allTags.filter((t) => t.name.toLowerCase().includes(q));
-  }, [allTags, filter]);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -125,71 +117,64 @@ export function EditTagsAction() {
         }
       />
       <PopoverContent className="w-72 p-0" align="start" side="top">
-        <div className="border-b p-2">
-          <Input
-            placeholder="Filter tags…"
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            className="h-8"
-          />
-        </div>
-        <div className="max-h-72 overflow-y-auto p-1">
-          {loading ? (
-            <p className="px-2 py-3 text-center text-xs text-muted-foreground">
-              Loading…
-            </p>
-          ) : filtered.length === 0 ? (
-            <p className="px-2 py-3 text-center text-xs text-muted-foreground">
-              {allTags.length === 0 ? "No tags yet." : "No matches."}
-            </p>
-          ) : (
-            <ul className="space-y-0.5">
-              {filtered.map((t) => {
-                const state = current.get(t.id) ?? "none";
-                return (
-                  <li key={t.id}>
-                    <button
-                      type="button"
-                      onClick={() => cycle(t.id)}
-                      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent"
+        <Command>
+          <CommandInput placeholder="Filter tags…" />
+          <CommandList>
+            <CommandEmpty>
+              {loading
+                ? "Loading…"
+                : allTags.length === 0
+                  ? "No tags yet."
+                  : "No matches."}
+            </CommandEmpty>
+            {allTags.length > 0 ? (
+              <CommandGroup>
+                {allTags.map((t) => {
+                  const state = current.get(t.id) ?? "none";
+                  return (
+                    <CommandItem
+                      key={t.id}
+                      value={t.name}
+                      onSelect={() => cycle(t.id)}
                     >
                       <Checkbox
                         checked={state === "all"}
                         indeterminate={state === "some"}
-                        // Visual-only inside the row button; the row click drives the state.
+                        // Visual-only inside the row; the row click drives state.
                         tabIndex={-1}
                         onClick={(e) => e.preventDefault()}
                       />
-                      <span className="flex-1 truncate text-left">{t.name}</span>
+                      <span className="flex-1 truncate">{t.name}</span>
                       <span className="text-xs text-muted-foreground">
                         {t.count}
                       </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </div>
-        <div className="flex items-center justify-end gap-2 border-t p-2">
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            onClick={() => setOpen(false)}
-            disabled={pending}
-          >
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            onClick={apply}
-            disabled={pending || loading}
-          >
-            {pending ? "Applying…" : "Apply"}
-          </Button>
-        </div>
+                    </CommandItem>
+                  );
+                })}
+              </CommandGroup>
+            ) : null}
+          </CommandList>
+          <Separator />
+          <div className="flex items-center justify-end gap-2 p-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => setOpen(false)}
+              disabled={pending}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={apply}
+              disabled={pending || loading}
+            >
+              {pending ? "Applying…" : "Apply"}
+            </Button>
+          </div>
+        </Command>
       </PopoverContent>
     </Popover>
   );

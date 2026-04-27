@@ -27,8 +27,9 @@ export type FolderResult =
   | { status: "ok"; folder: Folder }
   | { status: "error"; message: string };
 
-async function ancestorIds(folderId: string): Promise<string[]> {
-  // Walk up the tree following parentId pointers. Bounded by depth limit.
+// Walk up the tree following parentId pointers. Bounded by depth limit.
+// Exported so bulk operations (modules/manage/server.ts) can reuse it.
+export async function ancestorIds(folderId: string): Promise<string[]> {
   const ids: string[] = [];
   let current: string | null = folderId;
   for (let i = 0; i < 32 && current; i++) {

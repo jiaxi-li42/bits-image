@@ -1,6 +1,7 @@
 "use client";
 
 import { X } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import type { ViewKind } from "@/modules/views";
@@ -20,17 +21,14 @@ export function ManagePanel({ view }: { view: ViewKind }) {
   return (
     <div
       data-manage-panel="true"
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 shadow-xl backdrop-blur-md"
+      className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 shadow-xl backdrop-blur-md"
       role="region"
       aria-label="Manage selected photos"
     >
       <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-2 px-4 py-3 md:px-6">
-        <span className="text-sm">
-          <span className="font-semibold">{count}</span>
-          <span className="ml-1 text-muted-foreground">
-            {count === 1 ? "photo" : "photos"} selected
-          </span>
-        </span>
+        <Badge variant="secondary">
+          {count} {count === 1 ? "photo" : "photos"} selected
+        </Badge>
         <Separator orientation="vertical" className="mx-2 h-6" />
         {isTrash ? (
           <>

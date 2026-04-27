@@ -4,26 +4,10 @@ import { revalidatePath } from "next/cache";
 import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { db, schema } from "@/db/client";
 import { deleteAllForHash } from "@/modules/storage";
+import { ancestorIds } from "@/modules/folders/server";
 
 function revalidateAllViews() {
   revalidatePath("/", "layout");
-}
-
-async function ancestorIds(folderId: string): Promise<string[]> {
-  // Walk up the parent chain. Bounded; matches modules/folders/server.ts.
-  const ids: string[] = [];
-  let current: string | null = folderId;
-  for (let i = 0; i < 32 && current; i++) {
-    const row = await db
-      .select({ parentId: schema.folders.parentId })
-      .from(schema.folders)
-      .where(eq(schema.folders.id, current))
-      .get();
-    if (!row || !row.parentId) break;
-    ids.push(row.parentId);
-    current = row.parentId;
-  }
-  return ids;
 }
 
 export async function addImagesToFolder(
@@ -85,11 +69,13 @@ export async function hardDeleteImages(
       and(inArray(schema.images.id, ids), isNotNull(schema.images.deletedAt)),
     )
     .all();
-  for (const r of rows) {
-    await deleteAllForHash(r.hash).catch((err) => {
-      console.warn(`R2 cleanup failed for ${r.hash}:`, err);
-    });
-  }
+  await Promise.all(
+    rows.map((r) =>
+      deleteAllForHash(r.hash).catch((err) => {
+        console.warn(`R2 cleanup failed for ${r.hash}:`, err);
+      }),
+    ),
+  );
   if (rows.length > 0) {
     await db.delete(schema.images).where(
       inArray(
