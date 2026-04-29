@@ -29,6 +29,16 @@ export function Viewer({
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
+  // Mirror the latest zoom/pan in refs so the wheel handler can read fresh
+  // values across rapid events without depending on React's batching.
+  const zoomRef = useRef(zoom);
+  const panRef = useRef(pan);
+  useEffect(() => {
+    zoomRef.current = zoom;
+  }, [zoom]);
+  useEffect(() => {
+    panRef.current = pan;
+  }, [pan]);
 
   const total = images.length;
 
@@ -161,10 +171,34 @@ export function Viewer({
       if (e.deltaY === 0) return;
       e.preventDefault();
       const factor = Math.exp(-e.deltaY / 300);
-      setZoom((z) => {
-        const next = +(z * factor).toFixed(3);
-        return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, next));
-      });
+      // Cursor offset from the image's natural centre (== stage centre,
+      // because the image is centered in the stage flex container). Used
+      // to keep the world-point under the cursor stationary across zooms.
+      const rect = el.getBoundingClientRect();
+      const offsetX = e.clientX - (rect.left + rect.width / 2);
+      const offsetY = e.clientY - (rect.top + rect.height / 2);
+      // Read live values via refs — multiple wheel events can fire in the
+      // same tick before React commits, and we need each event to anchor
+      // off the most recent zoom/pan, not the value React last rendered.
+      const z0 = zoomRef.current;
+      const p0 = panRef.current;
+      const next = +(z0 * factor).toFixed(3);
+      const z1 = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, next));
+      if (z1 === z0) return;
+      const ratio = z1 / z0;
+      const newPan = clampPan(
+        {
+          x: offsetX + ratio * (p0.x - offsetX),
+          y: offsetY + ratio * (p0.y - offsetY),
+        },
+        z1,
+      );
+      // Update refs synchronously so the next wheel event reads correct
+      // state regardless of when React commits.
+      zoomRef.current = z1;
+      panRef.current = newPan;
+      setZoom(z1);
+      setPan(newPan);
     };
     el.addEventListener("wheel", handler, { passive: false });
     return () => el.removeEventListener("wheel", handler);

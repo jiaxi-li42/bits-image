@@ -19,5 +19,7 @@ export type {
   FolderResult,
 } from "./server";
 export { FolderPicker } from "./folder-picker";
+export { FolderListPicker } from "./folder-list-picker";
+export type { FolderListPickerProps } from "./folder-list-picker";
 export { FolderSidebar } from "./folder-sidebar";
 export { FolderHeaderActions } from "./folder-header-actions";

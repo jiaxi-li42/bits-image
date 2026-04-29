@@ -9,37 +9,6 @@ function revalidateAllViews() {
   revalidatePath("/", "layout");
 }
 
-export async function softDeleteImage(id: string): Promise<void> {
-  await db
-    .update(schema.images)
-    .set({ deletedAt: new Date() })
-    .where(eq(schema.images.id, id));
-  revalidateAllViews();
-}
-
-export async function restoreImage(id: string): Promise<void> {
-  await db
-    .update(schema.images)
-    .set({ deletedAt: null })
-    .where(eq(schema.images.id, id));
-  revalidateAllViews();
-}
-
-export async function hardDeleteImage(id: string): Promise<void> {
-  const row = await db
-    .select({ hash: schema.images.hash })
-    .from(schema.images)
-    .where(eq(schema.images.id, id))
-    .get();
-  if (!row) return;
-
-  await deleteAllForHash(row.hash).catch((err) => {
-    console.warn("R2 cleanup failed:", err);
-  });
-  await db.delete(schema.images).where(eq(schema.images.id, id));
-  revalidateAllViews();
-}
-
 export async function emptyTrash(): Promise<{ removed: number }> {
   const rows = await db
     .select({ id: schema.images.id, hash: schema.images.hash })

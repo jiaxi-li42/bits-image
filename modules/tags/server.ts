@@ -5,8 +5,10 @@ import { and, asc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { db, schema } from "@/db/client";
+import type { Tag as DbTag } from "@/db/schema";
 
-export type Tag = { id: string; name: string };
+// UI-facing slice (omits createdAt — none of the consumers need it).
+export type Tag = Pick<DbTag, "id" | "name">;
 export type TagWithCount = Tag & { count: number };
 
 const NameSchema = z.string().trim().min(1).max(64);

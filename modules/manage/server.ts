@@ -4,78 +4,9 @@ import { revalidatePath } from "next/cache";
 import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { db, schema } from "@/db/client";
 import { deleteAllForHash } from "@/modules/storage";
-import { ancestorIds } from "@/modules/folders/server";
 
 function revalidateAllViews() {
   revalidatePath("/", "layout");
-}
-
-export async function addImagesToFolder(
-  imageIds: string[],
-  folderId: string,
-): Promise<{ added: number; alreadyIn: number }> {
-  const ids = imageIds.filter(Boolean);
-  if (ids.length === 0) return { added: 0, alreadyIn: 0 };
-  const existing = await db
-    .select({ imageId: schema.imageFolders.imageId })
-    .from(schema.imageFolders)
-    .where(
-      and(
-        eq(schema.imageFolders.folderId, folderId),
-        inArray(schema.imageFolders.imageId, ids),
-      ),
-    )
-    .all();
-  const alreadyIn = existing.length;
-  const folderIds = [folderId, ...(await ancestorIds(folderId))];
-  // Cartesian: every selected image × (target folder + ancestors). One bulk
-  // insert with onConflictDoNothing keeps existing memberships untouched.
-  const rows = ids.flatMap((imageId) =>
-    folderIds.map((fid) => ({ imageId, folderId: fid })),
-  );
-  await db
-    .insert(schema.imageFolders)
-    .values(rows)
-    .onConflictDoNothing()
-    .run();
-  revalidateAllViews();
-  return { added: ids.length - alreadyIn, alreadyIn };
-}
-
-export async function moveImagesToFolder(
-  imageIds: string[],
-  fromFolderId: string,
-  toFolderId: string,
-): Promise<{ moved: number }> {
-  const ids = imageIds.filter(Boolean);
-  if (ids.length === 0 || fromFolderId === toFolderId) return { moved: 0 };
-  const fromChain = [fromFolderId, ...(await ancestorIds(fromFolderId))];
-  const toChain = [toFolderId, ...(await ancestorIds(toFolderId))];
-  const toChainSet = new Set(toChain);
-  // Strip source-side memberships (and ancestors), but keep any folder that
-  // also lives in the destination chain — the image stays under the shared
-  // ancestor through the new path.
-  const removeFolderIds = fromChain.filter((id) => !toChainSet.has(id));
-  if (removeFolderIds.length > 0) {
-    await db
-      .delete(schema.imageFolders)
-      .where(
-        and(
-          inArray(schema.imageFolders.imageId, ids),
-          inArray(schema.imageFolders.folderId, removeFolderIds),
-        ),
-      );
-  }
-  const addRows = ids.flatMap((imageId) =>
-    toChain.map((fid) => ({ imageId, folderId: fid })),
-  );
-  await db
-    .insert(schema.imageFolders)
-    .values(addRows)
-    .onConflictDoNothing()
-    .run();
-  revalidateAllViews();
-  return { moved: ids.length };
 }
 
 export async function softDeleteImages(

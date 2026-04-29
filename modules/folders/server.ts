@@ -5,13 +5,11 @@ import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { db, schema } from "@/db/client";
+import type { Folder as DbFolder } from "@/db/schema";
 import { MAX_FOLDER_DEPTH } from "./constants";
 
-export type Folder = {
-  id: string;
-  name: string;
-  parentId: string | null;
-};
+// UI-facing slice (omits createdAt — none of the consumers need it).
+export type Folder = Pick<DbFolder, "id" | "name" | "parentId">;
 export type FolderWithCount = Folder & { count: number };
 export type FolderNode = FolderWithCount & {
   path: string; // "Inspiration / Portrait"
@@ -278,19 +276,78 @@ export async function deleteFolder(id: string): Promise<void> {
   revalidateAllViews();
 }
 
+// Bulk: assign N images to a folder (and its ancestors) in one insert.
+// Returns how many images were already in the destination folder.
+export async function addImagesToFolder(
+  imageIds: string[],
+  folderId: string,
+): Promise<{ added: number; alreadyIn: number }> {
+  const ids = imageIds.filter(Boolean);
+  if (ids.length === 0) return { added: 0, alreadyIn: 0 };
+  const existing = await db
+    .select({ imageId: schema.imageFolders.imageId })
+    .from(schema.imageFolders)
+    .where(
+      and(
+        eq(schema.imageFolders.folderId, folderId),
+        inArray(schema.imageFolders.imageId, ids),
+      ),
+    )
+    .all();
+  const alreadyIn = existing.length;
+  const folderIds = [folderId, ...(await ancestorIds(folderId))];
+  const rows = ids.flatMap((imageId) =>
+    folderIds.map((fid) => ({ imageId, folderId: fid })),
+  );
+  await db
+    .insert(schema.imageFolders)
+    .values(rows)
+    .onConflictDoNothing()
+    .run();
+  revalidateAllViews();
+  return { added: ids.length - alreadyIn, alreadyIn };
+}
+
 export async function addImageToFolder(
   imageId: string,
   folderId: string,
 ): Promise<void> {
-  const ids = [folderId, ...(await ancestorIds(folderId))];
-  for (const id of ids) {
+  await addImagesToFolder([imageId], folderId);
+}
+
+// Bulk: move N images out of `fromFolderId` (and its ancestors) into
+// `toFolderId` (and its ancestors). Shared ancestors stay attached.
+export async function moveImagesToFolder(
+  imageIds: string[],
+  fromFolderId: string,
+  toFolderId: string,
+): Promise<{ moved: number }> {
+  const ids = imageIds.filter(Boolean);
+  if (ids.length === 0 || fromFolderId === toFolderId) return { moved: 0 };
+  const fromChain = [fromFolderId, ...(await ancestorIds(fromFolderId))];
+  const toChain = [toFolderId, ...(await ancestorIds(toFolderId))];
+  const toChainSet = new Set(toChain);
+  const removeFolderIds = fromChain.filter((id) => !toChainSet.has(id));
+  if (removeFolderIds.length > 0) {
     await db
-      .insert(schema.imageFolders)
-      .values({ imageId, folderId: id })
-      .onConflictDoNothing()
-      .run();
+      .delete(schema.imageFolders)
+      .where(
+        and(
+          inArray(schema.imageFolders.imageId, ids),
+          inArray(schema.imageFolders.folderId, removeFolderIds),
+        ),
+      );
   }
+  const addRows = ids.flatMap((imageId) =>
+    toChain.map((fid) => ({ imageId, folderId: fid })),
+  );
+  await db
+    .insert(schema.imageFolders)
+    .values(addRows)
+    .onConflictDoNothing()
+    .run();
   revalidateAllViews();
+  return { moved: ids.length };
 }
 
 export async function removeImageFromFolder(

@@ -1,35 +1,19 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { FolderPlus, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ConfirmDeleteDialog } from "@/modules/shell/confirm-delete-dialog";
+import { CreateEntityDialog } from "@/modules/shell/create-entity-dialog";
+import { RenameDialog } from "@/modules/shell/rename-dialog";
 import { createFolder, deleteFolder, renameFolder } from "./server";
 import { MAX_FOLDER_DEPTH } from "./constants";
 
@@ -44,58 +28,34 @@ export function FolderHeaderActions({
   const router = useRouter();
   const [renaming, setRenaming] = useState(false);
   const [creatingSub, setCreatingSub] = useState(false);
-  const [name, setName] = useState(folder.name);
-  const [subName, setSubName] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [pending, startTransition] = useTransition();
 
-  useEffect(() => {
-    if (!creatingSub) setSubName("");
-  }, [creatingSub]);
-  useEffect(() => {
-    if (!renaming) setName(folder.name);
-  }, [renaming, folder.name]);
-
-  const onRename = () => {
-    const trimmed = name.trim();
-    if (!trimmed || trimmed === folder.name) {
-      setRenaming(false);
-      return;
+  const onRename = async (trimmed: string) => {
+    const res = await renameFolder(folder.id, trimmed);
+    if (res.status === "ok") {
+      toast("Folder renamed");
+      router.refresh();
+    } else {
+      toast.error(res.message);
+      return false;
     }
-    startTransition(async () => {
-      const res = await renameFolder(folder.id, trimmed);
-      if (res.status === "ok") {
-        toast("Folder renamed");
-        setRenaming(false);
-        router.refresh();
-      } else {
-        toast.error(res.message);
-      }
-    });
   };
 
-  const onCreateSub = () => {
-    const trimmed = subName.trim();
-    if (!trimmed) return;
-    startTransition(async () => {
-      const res = await createFolder(trimmed, folder.id, { strict: true });
-      if (res.status === "ok") {
-        toast("Subfolder created");
-        setSubName("");
-        setCreatingSub(false);
-        router.push(`/folders/${res.folder.id}`);
-      } else {
-        toast.error(res.message);
-      }
-    });
+  const onCreateSub = async (trimmed: string) => {
+    const res = await createFolder(trimmed, folder.id, { strict: true });
+    if (res.status === "ok") {
+      toast("Subfolder created");
+      router.push(`/folders/${res.folder.id}`);
+    } else {
+      toast.error(res.message);
+      return false;
+    }
   };
 
-  const onDelete = () => {
-    startTransition(async () => {
-      await deleteFolder(folder.id);
-      toast("Folder deleted");
-      router.push("/library");
-    });
+  const onDelete = async () => {
+    await deleteFolder(folder.id);
+    toast("Folder deleted");
+    router.push("/library");
   };
 
   return (
@@ -114,22 +74,12 @@ export function FolderHeaderActions({
         />
         <DropdownMenuContent align="start" className="min-w-fit">
           {canAddSubfolder ? (
-            <DropdownMenuItem
-              onClick={() => {
-                setSubName("");
-                setCreatingSub(true);
-              }}
-            >
+            <DropdownMenuItem onClick={() => setCreatingSub(true)}>
               <FolderPlus />
               Add Subfolder
             </DropdownMenuItem>
           ) : null}
-          <DropdownMenuItem
-            onClick={() => {
-              setName(folder.name);
-              setRenaming(true);
-            }}
-          >
+          <DropdownMenuItem onClick={() => setRenaming(true)}>
             <Pencil />
             Rename
           </DropdownMenuItem>
@@ -143,91 +93,36 @@ export function FolderHeaderActions({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <Dialog open={creatingSub} onOpenChange={setCreatingSub}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>New subfolder</DialogTitle>
-            <DialogDescription>
-              The new folder will live under {folder.name}. Images added to it
-              are also assigned to {folder.name}.
-            </DialogDescription>
-          </DialogHeader>
-          <Input
-            placeholder="Subfolder name"
-            value={subName}
-            onChange={(e) => setSubName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                onCreateSub();
-              }
-            }}
-            autoFocus
-          />
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setCreatingSub(false)}
-              disabled={pending}
-            >
-              Cancel
-            </Button>
-            <Button onClick={onCreateSub} disabled={pending || !subName.trim()}>
-              {pending ? "Creating..." : "Create"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <CreateEntityDialog
+        open={creatingSub}
+        onOpenChange={setCreatingSub}
+        title="New subfolder"
+        description={
+          <>
+            The new folder will live under {folder.name}. Images added to it
+            are also assigned to {folder.name}.
+          </>
+        }
+        placeholder="Subfolder name"
+        onCreate={onCreateSub}
+      />
 
-      <Dialog open={renaming} onOpenChange={setRenaming}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Rename folder</DialogTitle>
-            <DialogDescription>
-              Images already in this folder stay assigned.
-            </DialogDescription>
-          </DialogHeader>
-          <Input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                onRename();
-              }
-            }}
-            autoFocus
-          />
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setRenaming(false)}
-              disabled={pending}
-            >
-              Cancel
-            </Button>
-            <Button onClick={onRename} disabled={pending || !name.trim()}>
-              {pending ? "Saving..." : "Save"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <RenameDialog
+        open={renaming}
+        onOpenChange={setRenaming}
+        title="Rename folder"
+        description="Images already in this folder stay assigned."
+        initialName={folder.name}
+        onRename={onRename}
+      />
 
-      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete this folder?</AlertDialogTitle>
-            <AlertDialogDescription>
-              The folder and any subfolders will be removed. Images inside are
-              not deleted.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={onDelete}>Delete</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDeleteDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title="Delete this folder?"
+        description="The folder and any subfolders will be removed. Images inside are not deleted."
+        onConfirm={onDelete}
+      />
     </>
   );
 }

@@ -89,46 +89,50 @@ export function TagFilterBar({ excludeTagId }: { excludeTagId?: string }) {
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger
           render={
-            <button
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
               className={cn(
-                "flex min-h-7 w-fit min-w-[7rem] max-w-xs items-center gap-1 rounded-md border border-border bg-background px-2.5 py-1 text-[0.8rem] font-medium transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-                selected.length === 0
-                  ? "cursor-pointer hover:bg-muted hover:text-foreground"
-                  : "cursor-text",
+                // Allow chips to wrap into multiple lines while keeping the
+                // base sm height as a floor. Left-align so chips don't drift
+                // to the centre when the trigger grows.
+                "h-auto min-h-7 min-w-[7rem] max-w-xs flex-wrap justify-start py-1",
+                selected.length > 0 &&
+                  // When chips are present the trigger reads more like an
+                  // input than a button — drop pointer/aria-expanded hover.
+                  "cursor-text hover:bg-background hover:text-foreground aria-expanded:bg-background aria-expanded:text-foreground",
               )}
             >
               {selected.length === 0 ? (
-                <span className="flex items-center gap-1">
+                <>
                   <Filter className="size-3.5" />
                   Filter by Tag
-                </span>
+                </>
               ) : (
-                <span className="flex flex-wrap items-center gap-1">
-                  {selected.map((t) => (
-                    <Badge
-                      key={t.id}
-                      variant="secondary"
-                      className="gap-1 rounded-sm py-0 pr-0.5 pl-1.5"
+                selected.map((t) => (
+                  <Badge
+                    key={t.id}
+                    variant="secondary"
+                    className="gap-1 rounded-sm py-0 pr-0.5 pl-1.5"
+                  >
+                    {t.name}
+                    <span
+                      role="button"
+                      tabIndex={-1}
+                      aria-label={`Remove Filter ${t.name}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggle(t.id);
+                      }}
+                      className="rounded p-0.5 hover:bg-muted-foreground/20"
                     >
-                      {t.name}
-                      <span
-                        role="button"
-                        tabIndex={-1}
-                        aria-label={`Remove Filter ${t.name}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggle(t.id);
-                        }}
-                        className="rounded p-0.5 hover:bg-muted-foreground/20"
-                      >
-                        <X className="size-3" />
-                      </span>
-                    </Badge>
-                  ))}
-                </span>
+                      <X className="size-3" />
+                    </span>
+                  </Badge>
+                ))
               )}
-            </button>
+            </Button>
           }
         />
         <PopoverContent className="w-48 p-0" align="start">

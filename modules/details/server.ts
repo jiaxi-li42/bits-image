@@ -4,13 +4,12 @@ import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db, schema } from "@/db/client";
+import type { Image } from "@/db/schema";
 
-export type ImageMeta = {
-  id: string;
-  title: string | null;
-  description: string | null;
-  sourceUrl: string | null;
-};
+export type ImageMeta = Pick<
+  Image,
+  "id" | "title" | "description" | "sourceUrl"
+>;
 
 export async function getImageMeta(id: string): Promise<ImageMeta | null> {
   const row = await db

@@ -23,12 +23,12 @@ import {
 } from "@/components/ui/alert-dialog";
 import { TagPicker } from "@/modules/tags";
 import { FolderPicker } from "@/modules/folders";
+import { getDownloadUrl } from "@/modules/actions/server";
 import {
-  getDownloadUrl,
-  hardDeleteImage,
-  restoreImage,
-  softDeleteImage,
-} from "@/modules/actions/server";
+  hardDeleteImages,
+  restoreImages,
+  softDeleteImages,
+} from "@/modules/manage/server";
 import type { ViewKind } from "@/modules/views";
 import { getImageMeta, updateImageMeta } from "./server";
 
@@ -146,7 +146,7 @@ export function DetailEditor({
 
   const onSoftDelete = () => {
     startTransition(async () => {
-      await softDeleteImage(imageId);
+      await softDeleteImages([imageId]);
       toast("Moved to Trash");
       onRemoved?.();
     });
@@ -154,7 +154,7 @@ export function DetailEditor({
 
   const onRestore = () => {
     startTransition(async () => {
-      await restoreImage(imageId);
+      await restoreImages([imageId]);
       toast("Restored");
       onRemoved?.();
     });
@@ -162,7 +162,7 @@ export function DetailEditor({
 
   const onHardDelete = () => {
     startTransition(async () => {
-      await hardDeleteImage(imageId);
+      await hardDeleteImages([imageId]);
       toast("Deleted permanently");
       setConfirmPurge(false);
       onRemoved?.();

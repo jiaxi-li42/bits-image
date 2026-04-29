@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -12,28 +12,13 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { CreateEntityDialog } from "@/modules/shell/create-entity-dialog";
 import { createFolder, type FolderNode } from "./server";
 
 export function FolderSidebar({ folders }: { folders: FolderNode[] }) {
   const router = useRouter();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const [name, setName] = useState("");
-  const [pending, startTransition] = useTransition();
-
-  useEffect(() => {
-    if (!open) setName("");
-  }, [open]);
 
   // Map id -> node for ancestor lookups. Auto-expand the chain that contains
   // whichever folder is currently routed so it stays visible after navigation.
@@ -103,20 +88,14 @@ export function FolderSidebar({ folders }: { folders: FolderNode[] }) {
     });
   };
 
-  const onCreate = () => {
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    startTransition(async () => {
-      const res = await createFolder(trimmed, null, { strict: true });
-      if (res.status === "error") {
-        toast.error(res.message);
-        return;
-      }
-      toast("Folder created");
-      setName("");
-      setOpen(false);
-      router.push(`/folders/${res.folder.id}`);
-    });
+  const onCreate = async (trimmed: string) => {
+    const res = await createFolder(trimmed, null, { strict: true });
+    if (res.status === "error") {
+      toast.error(res.message);
+      return false;
+    }
+    toast("Folder created");
+    router.push(`/folders/${res.folder.id}`);
   };
 
   return (
@@ -125,51 +104,22 @@ export function FolderSidebar({ folders }: { folders: FolderNode[] }) {
         <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
           Folders
         </h3>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger
-            render={
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label="New Folder"
-              >
-                <Plus className="size-3.5" />
-              </Button>
-            }
-          />
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>New folder</DialogTitle>
-              <DialogDescription>
-                Folders organise images independently of tags.
-              </DialogDescription>
-            </DialogHeader>
-            <Input
-              placeholder="Folder name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  onCreate();
-                }
-              }}
-              autoFocus
-            />
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => setOpen(false)}
-                disabled={pending}
-              >
-                Cancel
-              </Button>
-              <Button onClick={onCreate} disabled={pending || !name.trim()}>
-                {pending ? "Creating…" : "Create"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label="New Folder"
+          onClick={() => setOpen(true)}
+        >
+          <Plus className="size-3.5" />
+        </Button>
+        <CreateEntityDialog
+          open={open}
+          onOpenChange={setOpen}
+          title="New folder"
+          description="Folders organise images independently of tags."
+          placeholder="Folder name"
+          onCreate={onCreate}
+        />
       </div>
       {folders.length === 0 ? (
         <p className="px-3 py-1 text-xs text-muted-foreground">

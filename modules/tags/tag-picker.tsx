@@ -3,6 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { Plus, X } from "lucide-react";
 import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -153,10 +154,7 @@ export function TagPicker({ imageId }: { imageId: string }) {
         </PopoverContent>
       </Popover>
       {assigned.map((t) => (
-        <span
-          key={t.id}
-          className="inline-flex h-7 items-center gap-1 rounded-[min(var(--radius-md),12px)] bg-secondary pr-1 pl-2.5 text-[0.8rem] font-medium text-secondary-foreground"
-        >
+        <Badge key={t.id} variant="secondary" size="md" className="pr-1">
           {t.name}
           <button
             type="button"
@@ -166,7 +164,7 @@ export function TagPicker({ imageId }: { imageId: string }) {
           >
             <X className="size-3" />
           </button>
-        </span>
+        </Badge>
       ))}
     </div>
   );
