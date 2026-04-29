@@ -2,14 +2,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { User } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Badge } from "@/components/ui/badge";
 import { NAV_ITEMS } from "./nav-items";
 import type { ViewCounts } from "./counts";
 import { FolderSidebar } from "@/modules/folders";
 import { TagSidebar } from "@/modules/tags";
 import type { FolderNode } from "@/modules/folders";
 import type { TagWithCount } from "@/modules/tags";
+
+const APP_VERSION = "v0.9";
 
 export function DesktopSidebar({
   counts,
@@ -23,43 +25,49 @@ export function DesktopSidebar({
   const pathname = usePathname();
 
   return (
-    <aside className="hidden md:flex w-56 shrink-0 flex-col border-r bg-background overflow-y-auto">
-      <div className="px-4 py-5">
-        <Link href="/library" className="text-lg font-semibold tracking-tight">
-          Bits Image
-        </Link>
-      </div>
-      <nav className="px-2">
+    <aside className="sticky top-0 hidden h-dvh md:flex w-60 shrink-0 flex-col border-r bg-background">
+      <Link
+        href="/library"
+        className="flex shrink-0 items-center gap-3 px-4 py-4 hover:bg-accent/40"
+      >
+        <div className="flex size-9 items-center justify-center rounded-full bg-muted">
+          <User className="size-4 text-muted-foreground" />
+        </div>
+        <div className="leading-tight">
+          <div className="text-sm font-semibold">Bits Image</div>
+          <div className="text-xs text-muted-foreground">{APP_VERSION}</div>
+        </div>
+      </Link>
+
+      <nav className="shrink-0 mx-2 p-2 border-b">
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
           const active =
             pathname === item.href || pathname.startsWith(item.href + "/");
           const count = counts[item.view];
-          const showBadge = item.view === "inbox" ? count > 0 : false;
           return (
             <Link
               key={item.href}
               href={item.href}
               className={cn(
-                "group flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
+                "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
                 active
                   ? "bg-accent text-accent-foreground"
-                  : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                  : "text-foreground hover:bg-accent/50",
               )}
             >
               <Icon className="size-4" />
               <span className="flex-1">{item.label}</span>
-              {showBadge ? (
-                <Badge variant="secondary" className="h-5 px-1.5 text-xs">
-                  {count}
-                </Badge>
-              ) : null}
+              <span className="text-xs tabular-nums opacity-70">{count}</span>
             </Link>
           );
         })}
       </nav>
-      <FolderSidebar folders={folders} />
-      <TagSidebar tags={tags} />
+
+      <div className="no-scrollbar flex-1 min-h-0 overflow-y-auto">
+        <FolderSidebar folders={folders} />
+        <TagSidebar tags={tags} />
+      </div>
     </aside>
   );
 }

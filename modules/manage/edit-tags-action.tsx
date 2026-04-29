@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { Tags } from "lucide-react";
+import { SwatchBook } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -36,7 +36,7 @@ function deriveInitial(stat: TagStateForImages | undefined, total: number): Tri 
 }
 
 export function EditTagsAction() {
-  const { selected, count, clear } = useManage();
+  const { selected, count } = useManage();
   const [open, setOpen] = useState(false);
   const [allTags, setAllTags] = useState<TagWithCount[]>([]);
   const [initial, setInitial] = useState<Map<string, Tri>>(new Map());
@@ -89,15 +89,15 @@ export function EditTagsAction() {
       if (c === "all") add.push(tagId);
       else if (c === "none") remove.push(tagId);
     }
-    if (add.length === 0 && remove.length === 0) {
-      setOpen(false);
-      return;
-    }
+    setOpen(false);
+    if (add.length === 0 && remove.length === 0) return;
+    const targetIds = ids;
+    const targetTotal = total;
     startTransition(async () => {
-      await applyTagDiffToImages(ids, add, remove);
-      toast(`Tags updated on ${total} ${total === 1 ? "photo" : "photos"}`);
-      setOpen(false);
-      clear();
+      await applyTagDiffToImages(targetIds, add, remove);
+      toast(
+        `Tags updated on ${targetTotal} ${targetTotal === 1 ? "image" : "images"}`,
+      );
     });
   };
 
@@ -111,8 +111,8 @@ export function EditTagsAction() {
             size="sm"
             disabled={count === 0}
           >
-            <Tags className="size-4" />
-            Edit tags
+            <SwatchBook className="size-4" />
+            Edit Tags
           </Button>
         }
       />
@@ -141,8 +141,11 @@ export function EditTagsAction() {
                         checked={state === "all"}
                         indeterminate={state === "some"}
                         // Visual-only inside the row; the row click drives state.
+                        // pointer-events:none lets the click reach the
+                        // CommandItem onSelect — base-ui Checkbox would
+                        // otherwise swallow the event.
                         tabIndex={-1}
-                        onClick={(e) => e.preventDefault()}
+                        className="pointer-events-none"
                       />
                       <span className="flex-1 truncate">{t.name}</span>
                       <span className="text-xs text-muted-foreground">

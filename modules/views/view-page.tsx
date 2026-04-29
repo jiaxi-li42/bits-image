@@ -11,30 +11,26 @@ import type { TagFilterMode, ViewKind } from "./types";
 
 const VIEW_META: Record<
   ViewKind,
-  { title: string; description: string; emptyTitle: string; emptyBody: string }
+  { title: string; emptyTitle: string; emptyBody: string }
 > = {
   library: {
     title: "Library",
-    description: "Every image in your library.",
     emptyTitle: "Library is empty",
     emptyBody: "Upload images to start building your inspiration library.",
   },
   inbox: {
     title: "Inbox",
-    description: "Images you haven't tagged yet.",
     emptyTitle: "Inbox is clear",
     emptyBody:
       "Newly saved images land here until you give them at least one tag.",
   },
   organised: {
     title: "Organised",
-    description: "Images with at least one tag.",
     emptyTitle: "Nothing organised yet",
     emptyBody: "Tagged images appear here.",
   },
   trash: {
     title: "Trash",
-    description: "Deleted images are kept for 30 days.",
     emptyTitle: "Trash is empty",
     emptyBody:
       "Deleted images can be restored from here for up to 30 days.",
@@ -44,7 +40,7 @@ const VIEW_META: Record<
 export type ViewPageProps = {
   view: ViewKind;
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
-  folder?: { id: string; name: string; path?: string };
+  folder?: { id: string; name: string; path?: string; depth: number };
   tag?: { id: string; name: string };
 };
 
@@ -86,20 +82,17 @@ export async function ViewPage({
 
   const folderLabel = folder?.path ?? folder?.name ?? "";
   let title = meta.title;
-  let description = meta.description;
   let emptyTitle = meta.emptyTitle;
   let emptyBody = meta.emptyBody;
 
   if (folder) {
     title = folderLabel;
-    description = `Photos in "${folderLabel}".`;
     emptyTitle = "Folder is empty";
-    emptyBody = "Move photos into this folder from the Edit details panel.";
+    emptyBody = "Move images into this folder from the image details panel.";
   } else if (tag) {
     title = `#${tag.name}`;
-    description = `Photos tagged "${tag.name}".`;
-    emptyTitle = "No photos with this tag";
-    emptyBody = "Tag a photo from the Edit details panel.";
+    emptyTitle = "No images with this tag";
+    emptyBody = "Tag an image from the image details panel.";
   }
 
   return (
@@ -107,25 +100,29 @@ export async function ViewPage({
       <div className="flex min-h-dvh flex-col">
         <ViewHeader
           title={title}
-          description={description}
-          actions={
-            <>
-              <SearchBar />
-              {folder ? <FolderHeaderActions folder={folder} /> : null}
-              {tag ? <TagHeaderActions tag={tag} /> : null}
-              {view === "trash" && items.length > 0 ? (
-                <TrashEmptyButton />
-              ) : view !== "trash" ? (
-                <UploadButton folderId={folder?.id} tagId={tag?.id} />
-              ) : null}
-            </>
+          action={
+            folder ? (
+              <FolderHeaderActions folder={folder} depth={folder.depth} />
+            ) : tag ? (
+              <TagHeaderActions tag={tag} />
+            ) : null
           }
         />
-        {/* Toolbar row: filter (where applicable) + Manage toggle. Always
-            renders so the Manage button is reachable in every view. */}
-        <div className="flex flex-wrap items-center gap-2 border-b px-4 py-2 md:px-6">
-          {showTagFilter ? <TagFilterBar excludeTagId={tag?.id} /> : null}
-          <ManageBar />
+        {/* Toolbar row: filter (where applicable) on the left;
+            search + Manage + Upload on the right. */}
+        <div className="flex flex-wrap items-start gap-2 px-4 pb-3 md:px-6">
+          <div className="flex flex-wrap items-start gap-2">
+            {showTagFilter ? <TagFilterBar excludeTagId={tag?.id} /> : null}
+          </div>
+          <div className="ml-auto flex flex-wrap items-start gap-2">
+            <SearchBar />
+            <ManageBar />
+            {view === "trash" ? (
+              <TrashEmptyButton disabled={items.length === 0} />
+            ) : (
+              <UploadButton folderId={folder?.id} tagId={tag?.id} />
+            )}
+          </div>
         </div>
         {items.length === 0 ? (
           <EmptyState
@@ -146,7 +143,7 @@ export async function ViewPage({
           />
         )}
       </div>
-      <ManagePanel view={view} />
+      <ManagePanel view={view} folderId={folder?.id} />
     </ManageProvider>
   );
 }

@@ -18,6 +18,8 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { cn } from "@/lib/utils";
 import { listTags, type TagWithCount } from "./server";
 
 export function TagFilterBar({ excludeTagId }: { excludeTagId?: string }) {
@@ -87,18 +89,49 @@ export function TagFilterBar({ excludeTagId }: { excludeTagId?: string }) {
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger
           render={
-            <Button variant="outline" size="sm" className="h-7 gap-1.5">
-              <Filter className="size-3.5" />
-              Filter by tag
-              {selectedIds.length > 0 ? (
-                <span className="ml-1 rounded-full bg-primary/10 px-1.5 text-xs text-primary">
-                  {selectedIds.length}
+            <button
+              type="button"
+              className={cn(
+                "flex min-h-7 w-fit min-w-[7rem] max-w-xs items-center gap-1 rounded-md border border-border bg-background px-2.5 py-1 text-[0.8rem] font-medium transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+                selected.length === 0
+                  ? "cursor-pointer hover:bg-muted hover:text-foreground"
+                  : "cursor-text",
+              )}
+            >
+              {selected.length === 0 ? (
+                <span className="flex items-center gap-1">
+                  <Filter className="size-3.5" />
+                  Filter by Tag
                 </span>
-              ) : null}
-            </Button>
+              ) : (
+                <span className="flex flex-wrap items-center gap-1">
+                  {selected.map((t) => (
+                    <Badge
+                      key={t.id}
+                      variant="secondary"
+                      className="gap-1 rounded-sm py-0 pr-0.5 pl-1.5"
+                    >
+                      {t.name}
+                      <span
+                        role="button"
+                        tabIndex={-1}
+                        aria-label={`Remove Filter ${t.name}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggle(t.id);
+                        }}
+                        className="rounded p-0.5 hover:bg-muted-foreground/20"
+                      >
+                        <X className="size-3" />
+                      </span>
+                    </Badge>
+                  ))}
+                </span>
+              )}
+            </button>
           }
         />
-        <PopoverContent className="w-64 p-0" align="start">
+        <PopoverContent className="w-48 p-0" align="start">
           <Command>
             <CommandInput placeholder="Search tags..." />
             <CommandList>
@@ -110,13 +143,10 @@ export function TagFilterBar({ excludeTagId }: { excludeTagId?: string }) {
                     <CommandItem
                       key={t.id}
                       value={t.name}
-                      data-checked={checked ? "true" : "false"}
+                      data-checked={checked ? "true" : undefined}
                       onSelect={() => toggle(t.id)}
                     >
-                      <span className="flex-1 truncate">{t.name}</span>
-                      <span className="ml-2 text-xs text-muted-foreground">
-                        {t.count}
-                      </span>
+                      <span className="truncate">{t.name}</span>
                     </CommandItem>
                   );
                 })}
@@ -126,50 +156,29 @@ export function TagFilterBar({ excludeTagId }: { excludeTagId?: string }) {
         </PopoverContent>
       </Popover>
 
-      {selected.map((t) => (
-        <Badge key={t.id} variant="secondary" className="pr-1">
-          {t.name}
-          <button
-            type="button"
-            onClick={() => toggle(t.id)}
-            className="ml-0.5 rounded-full p-0.5 hover:bg-muted-foreground/20"
-            aria-label={`Remove filter ${t.name}`}
-          >
-            <X className="size-3" />
-          </button>
-        </Badge>
-      ))}
-
       {selectedIds.length > 1 ? (
-        <div className="inline-flex h-7 overflow-hidden rounded-md border">
-          <Button
-            type="button"
-            variant={mode === "and" ? "secondary" : "ghost"}
-            size="sm"
-            className="h-7 rounded-none px-2 text-xs"
-            onClick={() => update({ mode: "and" })}
-          >
-            All
-          </Button>
-          <Button
-            type="button"
-            variant={mode === "or" ? "secondary" : "ghost"}
-            size="sm"
-            className="h-7 rounded-none px-2 text-xs"
-            onClick={() => update({ mode: "or" })}
-          >
-            Any
-          </Button>
-        </div>
+        <ToggleGroup
+          size="sm"
+          variant="outline"
+          value={[mode]}
+          onValueChange={(v) => {
+            // base-ui ToggleGroup is multi-select; treat the most recently
+            // pressed value as the new (single) mode, ignore deselects.
+            const next = v[v.length - 1];
+            if (next === "and" || next === "or") update({ mode: next });
+          }}
+        >
+          <ToggleGroupItem value="and" aria-label="Match all selected tags">
+            Match all
+          </ToggleGroupItem>
+          <ToggleGroupItem value="or" aria-label="Match any selected tag">
+            Match any
+          </ToggleGroupItem>
+        </ToggleGroup>
       ) : null}
 
       {selectedIds.length > 0 ? (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 px-2 text-xs"
-          onClick={clear}
-        >
+        <Button variant="ghost" size="sm" onClick={clear}>
           Clear
         </Button>
       ) : null}

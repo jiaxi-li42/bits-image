@@ -58,7 +58,10 @@ export async function listTagsForImage(imageId: string): Promise<Tag[]> {
   return rows;
 }
 
-export async function createTag(name: string): Promise<TagResult> {
+export async function createTag(
+  name: string,
+  options: { strict?: boolean } = {},
+): Promise<TagResult> {
   const parsed = NameSchema.safeParse(name);
   if (!parsed.success) {
     return { status: "error", message: parsed.error.issues[0]?.message ?? "Invalid name" };
@@ -69,7 +72,12 @@ export async function createTag(name: string): Promise<TagResult> {
     .from(schema.tags)
     .where(eq(schema.tags.name, normalized))
     .get();
-  if (existing) return { status: "ok", tag: existing };
+  if (existing) {
+    if (options.strict) {
+      return { status: "error", message: "A tag with that name already exists" };
+    }
+    return { status: "ok", tag: existing };
+  }
 
   const id = randomUUID();
   await db.insert(schema.tags).values({ id, name: normalized });

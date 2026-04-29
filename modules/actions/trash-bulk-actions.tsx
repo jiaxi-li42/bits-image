@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { emptyTrash } from "./server";
 
-export function TrashEmptyButton() {
+export function TrashEmptyButton({ disabled }: { disabled?: boolean }) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
@@ -27,7 +27,7 @@ export function TrashEmptyButton() {
     startTransition(async () => {
       const { removed } = await emptyTrash();
       setOpen(false);
-      toast(removed > 0 ? `Deleted ${removed} image${removed === 1 ? "" : "s"}` : "Trash already empty");
+      toast(removed > 0 ? `${removed} image${removed === 1 ? "" : "s"} deleted` : "Trash already empty");
       router.refresh();
     });
   };
@@ -36,9 +36,9 @@ export function TrashEmptyButton() {
     <AlertDialog open={open} onOpenChange={setOpen}>
       <AlertDialogTrigger
         render={
-          <Button variant="destructive" size="sm">
+          <Button variant="destructive" size="sm" disabled={disabled}>
             <Trash2 className="size-4" />
-            Empty trash
+            Empty Trash
           </Button>
         }
       />
@@ -52,7 +52,7 @@ export function TrashEmptyButton() {
         <AlertDialogFooter>
           <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
           <AlertDialogAction onClick={onConfirm} disabled={pending}>
-            {pending ? "Deleting…" : "Empty trash"}
+            {pending ? "Deleting…" : "Empty Trash"}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

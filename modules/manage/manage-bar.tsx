@@ -1,24 +1,23 @@
 "use client";
 
-import { CheckSquare2 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { SquarePen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useManage } from "./manage-context";
 
 export function ManageBar() {
-  const { isManaging, toggleMode, count } = useManage();
+  const { isManaging, enter } = useManage();
 
   return (
     <Button
       type="button"
-      variant={isManaging ? "secondary" : "outline"}
+      variant="outline"
       size="sm"
-      onClick={toggleMode}
+      onClick={enter}
+      disabled={isManaging}
       aria-pressed={isManaging}
     >
-      <CheckSquare2 className="size-3.5" />
-      {isManaging ? "Done" : "Manage"}
-      {isManaging && count > 0 ? <Badge variant="secondary">{count}</Badge> : null}
+      <SquarePen className="size-3.5" />
+      Manage
     </Button>
   );
 }

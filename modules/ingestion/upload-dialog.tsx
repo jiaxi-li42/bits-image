@@ -38,7 +38,7 @@ export function UploadButton({
         <DialogHeader>
           <DialogTitle>Upload images</DialogTitle>
           <DialogDescription>
-            Drag-drop or pick files. Duplicates are skipped automatically.
+            Duplicates or unsupported formats are skipped automatically.
           </DialogDescription>
         </DialogHeader>
         <UploadDropzone
@@ -83,7 +83,12 @@ function UploadDropzone({
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    accept: { "image/*": [] },
+    accept: {
+      "image/jpeg": [".jpg", ".jpeg"],
+      "image/png": [".png"],
+      "image/webp": [".webp"],
+      "image/avif": [".avif"],
+    },
     multiple: true,
   });
 
@@ -156,7 +161,7 @@ function UploadDropzone({
   };
 
   return (
-    <div className="space-y-3">
+    <div className="min-w-0 space-y-3">
       <div
         {...getRootProps()}
         className={cn(
@@ -173,14 +178,17 @@ function UploadDropzone({
             ? "Drop images here"
             : "Drag images here, or click to choose"}
         </p>
+        <p className="text-sm text-muted-foreground">
+          JPG, PNG, WebP, AVIF (max 50MB)
+        </p>
       </div>
 
       {entries.length > 0 ? (
-        <ul className="max-h-48 overflow-y-auto rounded-md border text-sm">
+        <ul className="min-w-0 max-h-48 overflow-y-auto rounded-md border text-sm">
           {entries.map((e) => (
             <li
               key={e.id}
-              className="flex items-center justify-between gap-3 border-b px-3 py-2 last:border-b-0"
+              className="flex min-w-0 items-center justify-between gap-3 border-b px-3 py-2 last:border-b-0"
             >
               <span className="min-w-0 flex-1 truncate" title={e.file.name}>
                 {e.file.name}

@@ -37,26 +37,26 @@ export function SearchBar() {
   }, [value, params, router]);
 
   return (
-    <div className="relative w-full max-w-sm">
-      <Search className="pointer-events-none absolute top-1/2 left-2 size-4 -translate-y-1/2 text-muted-foreground" />
+    <div className="relative w-72">
+      <Search className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
       <Input
         type="text"
         role="searchbox"
-        placeholder="Search title, description, source…"
+        placeholder="Search images..."
         value={value}
         onChange={(e) => setValue(e.target.value)}
-        className="h-8 pl-7 pr-7"
+        className="h-7 rounded-md pl-7 pr-7 text-[0.8rem] md:text-[0.8rem]"
       />
       {value ? (
         <Button
           type="button"
           variant="ghost"
-          size="icon"
-          className="absolute top-1/2 right-0.5 size-7 -translate-y-1/2"
+          size="icon-xs"
+          className="absolute top-1/2 right-0.5 -translate-y-1/2"
           onClick={() => setValue("")}
           aria-label="Clear search"
         >
-          <X className="size-3.5" />
+          <X className="size-3" />
         </Button>
       ) : null}
     </div>

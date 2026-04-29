@@ -15,7 +15,12 @@ export default async function FolderPage({
   return (
     <ViewPage
       view="library"
-      folder={{ id: data.folder.id, name: data.folder.name, path: data.path }}
+      folder={{
+        id: data.folder.id,
+        name: data.folder.name,
+        path: data.path,
+        depth: data.depth,
+      }}
       searchParams={searchParams}
     />
   );

@@ -1,10 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { db, schema } from "@/db/client";
+import { MAX_FOLDER_DEPTH } from "./constants";
 
 export type Folder = {
   id: string;
@@ -21,6 +22,10 @@ const NameSchema = z.string().trim().min(1).max(64);
 
 function revalidateAllViews() {
   revalidatePath("/", "layout");
+}
+
+export async function getFolderDepth(id: string): Promise<number> {
+  return (await ancestorIds(id)).length;
 }
 
 export type FolderResult =
@@ -109,11 +114,12 @@ export async function getFolder(id: string): Promise<Folder | null> {
 
 export async function getFolderWithPath(
   id: string,
-): Promise<{ folder: Folder; path: string } | null> {
+): Promise<{ folder: Folder; path: string; depth: number } | null> {
   const folder = await getFolder(id);
   if (!folder) return null;
   const ancestors = await ancestorIds(id);
-  if (ancestors.length === 0) return { folder, path: folder.name };
+  const depth = ancestors.length;
+  if (ancestors.length === 0) return { folder, path: folder.name, depth };
   const rows = await db
     .select({ id: schema.folders.id, name: schema.folders.name })
     .from(schema.folders)
@@ -125,7 +131,7 @@ export async function getFolderWithPath(
     .reverse()
     .map((aid) => nameById.get(aid) ?? "")
     .filter(Boolean);
-  return { folder, path: [...ordered, folder.name].join(" / ") };
+  return { folder, path: [...ordered, folder.name].join(" / "), depth };
 }
 
 export async function listFoldersForImage(imageId: string): Promise<Folder[]> {
@@ -153,6 +159,7 @@ export async function listFoldersForImage(imageId: string): Promise<Folder[]> {
 export async function createFolder(
   name: string,
   parentId: string | null = null,
+  options: { strict?: boolean } = {},
 ): Promise<FolderResult> {
   const parsed = NameSchema.safeParse(name);
   if (!parsed.success) {
@@ -162,6 +169,15 @@ export async function createFolder(
     };
   }
   const trimmed = parsed.data;
+  if (parentId) {
+    const parentDepth = await getFolderDepth(parentId);
+    if (parentDepth >= MAX_FOLDER_DEPTH) {
+      return {
+        status: "error",
+        message: "Folder nesting is limited to three levels",
+      };
+    }
+  }
   const where = parentId
     ? and(eq(schema.folders.name, trimmed), eq(schema.folders.parentId, parentId))
     : and(eq(schema.folders.name, trimmed), sql`${schema.folders.parentId} IS NULL`);
@@ -175,6 +191,12 @@ export async function createFolder(
     .where(where)
     .get();
   if (existing) {
+    if (options.strict) {
+      return {
+        status: "error",
+        message: "A folder with that name already exists",
+      };
+    }
     return {
       status: "ok",
       folder: {
@@ -237,7 +259,22 @@ export async function renameFolder(
 }
 
 export async function deleteFolder(id: string): Promise<void> {
-  await db.delete(schema.folders).where(eq(schema.folders.id, id));
+  // Migration 0003 added folders.parent_id via ALTER TABLE, which SQLite
+  // applies with FK action NO ACTION — the schema's ON DELETE CASCADE never
+  // took effect on disk. Cascade in app code: BFS down the tree, then delete
+  // every descendant before the target.
+  const all: string[] = [id];
+  let frontier: string[] = [id];
+  while (frontier.length > 0) {
+    const rows = await db
+      .select({ id: schema.folders.id })
+      .from(schema.folders)
+      .where(inArray(schema.folders.parentId, frontier))
+      .all();
+    frontier = rows.map((r) => r.id);
+    all.push(...frontier);
+  }
+  await db.delete(schema.folders).where(inArray(schema.folders.id, all));
   revalidateAllViews();
 }
 

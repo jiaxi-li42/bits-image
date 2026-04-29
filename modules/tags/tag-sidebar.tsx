@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Plus, Tag as TagIcon } from "lucide-react";
@@ -26,11 +26,15 @@ export function TagSidebar({ tags }: { tags: TagWithCount[] }) {
   const [name, setName] = useState("");
   const [pending, startTransition] = useTransition();
 
+  useEffect(() => {
+    if (!createOpen) setName("");
+  }, [createOpen]);
+
   const onCreate = () => {
     const trimmed = name.trim();
     if (!trimmed) return;
     startTransition(async () => {
-      const res = await createTag(trimmed);
+      const res = await createTag(trimmed, { strict: true });
       if (res.status === "error") {
         toast.error(res.message);
         return;
@@ -53,9 +57,8 @@ export function TagSidebar({ tags }: { tags: TagWithCount[] }) {
             render={
               <Button
                 variant="ghost"
-                size="icon"
-                className="size-5"
-                aria-label="New tag"
+                size="icon-sm"
+                aria-label="New Tag"
               >
                 <Plus className="size-3.5" />
               </Button>
@@ -65,7 +68,7 @@ export function TagSidebar({ tags }: { tags: TagWithCount[] }) {
             <DialogHeader>
               <DialogTitle>New tag</DialogTitle>
               <DialogDescription>
-                Tags can be assigned to any photo from the Edit details panel.
+                Tags can be assigned to any image from the image details panel.
               </DialogDescription>
             </DialogHeader>
             <Input
@@ -110,7 +113,7 @@ export function TagSidebar({ tags }: { tags: TagWithCount[] }) {
                     "group flex items-center gap-2 rounded-md px-3 py-1.5 text-sm transition-colors",
                     active
                       ? "bg-accent text-accent-foreground"
-                      : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                      : "text-foreground hover:bg-accent/50",
                   )}
                 >
                   <TagIcon className="size-3.5 shrink-0" />

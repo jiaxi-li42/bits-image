@@ -18,7 +18,7 @@ export function MobileNav({ counts }: { counts: ViewCounts }) {
         const Icon = item.icon;
         const active = pathname === item.href || pathname.startsWith(item.href + "/");
         const count = counts[item.view];
-        const showBadge = item.view === "inbox" ? count > 0 : false;
+        const showBadge = count > 0;
         return (
           <Link
             key={item.href}

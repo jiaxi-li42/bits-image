@@ -99,6 +99,7 @@ export async function listImages({
       height: schema.images.height,
       title: schema.images.title,
       createdAt: schema.images.createdAt,
+      deletedAt: schema.images.deletedAt,
     })
     .from(schema.images)
     .where(where)
@@ -114,6 +115,12 @@ export async function listImages({
     height: r.height,
     title: r.title,
     createdAt: r.createdAt instanceof Date ? r.createdAt.getTime() : (r.createdAt as number),
+    deletedAt:
+      r.deletedAt == null
+        ? null
+        : r.deletedAt instanceof Date
+          ? r.deletedAt.getTime()
+          : (r.deletedAt as number),
   }));
 
   const last = items[items.length - 1];

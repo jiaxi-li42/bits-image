@@ -3,6 +3,7 @@ export {
   listFoldersForImage,
   getFolder,
   getFolderWithPath,
+  getFolderDepth,
   createFolder,
   renameFolder,
   deleteFolder,
@@ -10,6 +11,7 @@ export {
   removeImageFromFolder,
   addImageToFolderByName,
 } from "./server";
+export { MAX_FOLDER_DEPTH } from "./constants";
 export type {
   Folder,
   FolderWithCount,

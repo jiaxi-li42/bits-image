@@ -3,7 +3,6 @@
 import { useEffect, useState, useTransition } from "react";
 import { Plus, X } from "lucide-react";
 import { toast } from "sonner";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -97,30 +96,12 @@ export function TagPicker({ imageId }: { imageId: string }) {
 
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      {assigned.map((t) => (
-        <Badge key={t.id} variant="secondary" className="pr-1">
-          {t.name}
-          <button
-            type="button"
-            onClick={() => onUnassign(t)}
-            className="ml-0.5 rounded-full p-0.5 hover:bg-muted-foreground/20"
-            aria-label={`Remove tag ${t.name}`}
-          >
-            <X className="size-3" />
-          </button>
-        </Badge>
-      ))}
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger
           render={
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-6 gap-1 px-2 text-xs"
-            >
-              <Plus className="size-3" />
-              Add tag
+            <Button type="button" variant="outline" size="sm">
+              <Plus className="size-3.5" />
+              Add Tag
             </Button>
           }
         />
@@ -171,6 +152,22 @@ export function TagPicker({ imageId }: { imageId: string }) {
           </Command>
         </PopoverContent>
       </Popover>
+      {assigned.map((t) => (
+        <span
+          key={t.id}
+          className="inline-flex h-7 items-center gap-1 rounded-[min(var(--radius-md),12px)] bg-secondary pr-1 pl-2.5 text-[0.8rem] font-medium text-secondary-foreground"
+        >
+          {t.name}
+          <button
+            type="button"
+            onClick={() => onUnassign(t)}
+            className="rounded-full p-0.5 hover:bg-muted-foreground/20"
+            aria-label={`Remove Tag ${t.name}`}
+          >
+            <X className="size-3" />
+          </button>
+        </span>
+      ))}
     </div>
   );
 }

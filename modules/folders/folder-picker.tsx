@@ -3,7 +3,6 @@
 import { useEffect, useState, useTransition } from "react";
 import { Folder as FolderIcon, Plus } from "lucide-react";
 import { toast } from "sonner";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -151,26 +150,12 @@ export function FolderPicker({ imageId }: { imageId: string }) {
 
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      {assigned.map((f) => {
-        const path = pathById.get(f.id) ?? f.name;
-        return (
-          <Badge key={f.id} variant="outline" title={path}>
-            <FolderIcon className="size-3" />
-            {f.name}
-          </Badge>
-        );
-      })}
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger
           render={
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-6 gap-1 px-2 text-xs"
-            >
-              <Plus className="size-3" />
-              Select folder
+            <Button type="button" variant="outline" size="sm">
+              <Plus className="size-3.5" />
+              Select Folder
             </Button>
           }
         />
@@ -237,6 +222,19 @@ export function FolderPicker({ imageId }: { imageId: string }) {
           </Command>
         </PopoverContent>
       </Popover>
+      {assigned.map((f) => {
+        const path = pathById.get(f.id) ?? f.name;
+        return (
+          <span
+            key={f.id}
+            title={path}
+            className="inline-flex h-7 items-center gap-1 rounded-md px-2.5 text-[0.8rem] font-medium text-foreground"
+          >
+            <FolderIcon className="size-3.5" />
+            {f.name}
+          </span>
+        );
+      })}
     </div>
   );
 }

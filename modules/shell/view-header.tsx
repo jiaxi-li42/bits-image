@@ -2,28 +2,25 @@ import type { ReactNode } from "react";
 
 export function ViewHeader({
   title,
-  description,
-  actions,
+  action,
 }: {
   title: string;
-  description?: string;
-  actions?: ReactNode;
+  action?: ReactNode;
 }) {
   return (
-    <header className="flex items-start justify-between gap-4 border-b px-4 py-4 md:px-6 md:py-5">
-      <div>
+    <header className="px-4 pt-6 pb-3 md:px-6">
+      <div className="flex items-center gap-1">
         <h1 className="text-lg font-semibold tracking-tight md:text-xl">
           {title}
         </h1>
-        {description ? (
-          <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>
-        ) : null}
+        {action}
       </div>
-      {actions ? <div className="flex items-center gap-2">{actions}</div> : null}
     </header>
   );
 }
 
+// EmptyState is unrelated to ViewHeader but lives in this file historically;
+// keep export.
 export function EmptyState({
   title,
   description,

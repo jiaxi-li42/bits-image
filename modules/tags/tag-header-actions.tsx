@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Pencil, Trash2 } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +24,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { deleteTag, renameTag } from "./server";
 
 export function TagHeaderActions({
@@ -36,6 +42,10 @@ export function TagHeaderActions({
   const [name, setName] = useState(tag.name);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [pending, startTransition] = useTransition();
+
+  useEffect(() => {
+    if (!renaming) setName(tag.name);
+  }, [renaming, tag.name]);
 
   const onRename = () => {
     const trimmed = name.trim();
@@ -58,39 +68,47 @@ export function TagHeaderActions({
   const onDelete = () => {
     startTransition(async () => {
       await deleteTag(tag.id);
-      toast(`Deleted "${tag.name}"`);
+      toast(`"${tag.name}" deleted`);
       router.push("/library");
     });
   };
 
   return (
     <>
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => {
-          setName(tag.name);
-          setRenaming(true);
-        }}
-      >
-        <Pencil className="size-3.5" />
-        Rename
-      </Button>
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => setConfirmDelete(true)}
-      >
-        <Trash2 className="size-3.5" />
-        Delete Tag
-      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <Button variant="ghost" size="icon-sm" aria-label="Tag actions">
+              <MoreHorizontal className="size-4" />
+            </Button>
+          }
+        />
+        <DropdownMenuContent align="start" className="min-w-fit">
+          <DropdownMenuItem
+            onClick={() => {
+              setName(tag.name);
+              setRenaming(true);
+            }}
+          >
+            <Pencil />
+            Rename
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            variant="destructive"
+            onClick={() => setConfirmDelete(true)}
+          >
+            <Trash2 />
+            Delete Tag
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
 
       <Dialog open={renaming} onOpenChange={setRenaming}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Rename tag</DialogTitle>
             <DialogDescription>
-              Photos tagged with this tag stay assigned.
+              Images tagged with this tag stay assigned.
             </DialogDescription>
           </DialogHeader>
           <Input
@@ -124,7 +142,7 @@ export function TagHeaderActions({
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this tag?</AlertDialogTitle>
             <AlertDialogDescription>
-              The tag will be removed from all photos. The photos themselves
+              The tag will be removed from all images. The images themselves
               are not deleted.
             </AlertDialogDescription>
           </AlertDialogHeader>

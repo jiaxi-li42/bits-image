@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
-import { Check } from "lucide-react";
 import { MasonryPhotoAlbum, type Photo } from "react-photo-album";
 import "react-photo-album/masonry.css";
 import { loadMore } from "./actions";
+import { TRASH_RETENTION_MS } from "./types";
 import type { GridImage, TagFilterMode, ViewKind } from "./types";
 import { Viewer } from "@/modules/viewer";
 import { useManage } from "@/modules/manage";
+import { Checkbox } from "@/components/ui/checkbox";
 
 export type GridProps = {
   view: ViewKind;
@@ -19,17 +20,27 @@ export type GridProps = {
   folderId?: string;
 };
 
-type GridPhoto = Photo & { id: string; hash: string };
+type GridPhoto = Photo & {
+  id: string;
+  hash: string;
+  deletedAt: number | null;
+};
 
 function toPhoto(i: GridImage): GridPhoto {
   return {
     id: i.id,
     hash: i.hash,
+    deletedAt: i.deletedAt,
     src: `/api/img/grid/${i.hash}`,
     width: i.width,
     height: i.height,
     alt: i.title ?? "",
   };
+}
+
+function daysLeft(deletedAt: number): number {
+  const ms = deletedAt + TRASH_RETENTION_MS - Date.now();
+  return Math.max(0, Math.ceil(ms / (24 * 60 * 60 * 1000)));
 }
 
 export function Grid({
@@ -144,7 +155,7 @@ export function Grid({
         <MasonryPhotoAlbum
           photos={photos}
           columns={(w) => (w < 540 ? 2 : w < 900 ? 3 : w < 1300 ? 4 : 5)}
-          spacing={8}
+          spacing={16}
           onClick={({ index }) => {
             const photo = photos[index];
             if (!photo) return;
@@ -169,7 +180,7 @@ export function Grid({
                   style={style}
                   data-photo-card="true"
                   data-photo-id={photo?.id}
-                  className={`${className ?? ""} relative cursor-pointer rounded-md outline-none ring-offset-2 ring-offset-background transition-shadow ${
+                  className={`${className ?? ""} relative cursor-pointer overflow-hidden rounded-md outline-none ring-offset-2 ring-offset-background transition-shadow ${
                     isSelected
                       ? "ring-2 ring-primary"
                       : "focus-visible:ring-2 focus-visible:ring-ring"
@@ -186,17 +197,21 @@ export function Grid({
                   aria-pressed={isSelected}
                 >
                   {children}
-                  {manage.isManaging ? (
-                    <span
-                      aria-hidden
-                      className={`pointer-events-none absolute top-2 right-2 flex size-6 items-center justify-center rounded-full border ${
-                        isMulti
-                          ? "border-primary bg-primary text-primary-foreground"
-                          : "border-foreground/40 bg-background/80"
-                      }`}
-                    >
-                      {isMulti ? <Check className="size-3.5" /> : null}
+                  {view === "trash" && photo?.deletedAt != null ? (
+                    <span className="pointer-events-none absolute top-2 left-2 rounded-md bg-background/80 px-1.5 py-0.5 text-xs font-medium text-foreground shadow-xs">
+                      {(() => {
+                        const d = daysLeft(photo.deletedAt);
+                        return d === 1 ? "1 day left" : `${d} days left`;
+                      })()}
                     </span>
+                  ) : null}
+                  {manage.isManaging ? (
+                    <Checkbox
+                      checked={isMulti}
+                      tabIndex={-1}
+                      aria-hidden
+                      className="pointer-events-none absolute top-2 right-2 size-5 bg-background/80"
+                    />
                   ) : null}
                 </div>
               );

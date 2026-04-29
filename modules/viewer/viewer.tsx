@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Minus, Plus, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Minus, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { GridImage, ViewKind } from "@/modules/views";
 import { DetailEditor } from "@/modules/details";
@@ -58,6 +58,15 @@ export function Viewer({
     setZoom(1);
     setPan({ x: 0, y: 0 });
   }, [safeIndex]);
+
+  // Lock background scroll while the viewer is open.
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
 
   // Compute the max pan that still keeps the (scaled) image overlapping the
   // stage on both axes. Past this, you'd be staring at empty backdrop.
@@ -250,7 +259,7 @@ export function Viewer({
       className="fixed inset-0 z-50 flex bg-background/40 backdrop-blur-xl backdrop-saturate-150"
       role="dialog"
       aria-modal="true"
-      aria-label="Image viewer"
+      aria-label="Image Viewer"
       data-viewer="true"
     >
       <div
@@ -264,51 +273,48 @@ export function Viewer({
           </div>
         ) : null}
 
-        {/* Toolbar (top-right): zoom out, zoom in, close */}
-        <div className="absolute top-2 right-2 z-20 flex items-center gap-1">
+        {/* Toolbar (top-right): zoom in / zoom out, stacked. Close lives in the editor panel header. */}
+        <div
+          data-slot="button-group"
+          data-orientation="vertical"
+          className="absolute top-3 right-3 z-20 flex flex-col overflow-hidden rounded-lg border border-border bg-background shadow-sm"
+        >
           <Button
             variant="ghost"
             size="icon"
-            className="size-9 rounded-full bg-foreground/70 text-background hover:bg-foreground/85 hover:text-background"
-            onClick={stopAnd(zoomOut)}
-            disabled={zoom <= MIN_ZOOM}
-            aria-label="Zoom out"
-          >
-            <Minus className="size-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-9 rounded-full bg-foreground/70 text-background hover:bg-foreground/85 hover:text-background"
+            className="size-9 rounded-none border-0 hover:bg-muted disabled:opacity-30"
             onClick={stopAnd(zoomIn)}
             disabled={zoom >= MAX_ZOOM}
-            aria-label="Zoom in"
+            aria-label="Zoom In"
           >
             <Plus className="size-4" />
           </Button>
           <Button
             variant="ghost"
             size="icon"
-            className="size-9 rounded-full bg-foreground/70 text-background hover:bg-foreground/85 hover:text-background"
-            onClick={stopAnd(closeWithCurrent)}
-            aria-label="Close"
+            className="size-9 rounded-none border-0 border-t border-border hover:bg-muted disabled:opacity-30"
+            onClick={stopAnd(zoomOut)}
+            disabled={zoom <= MIN_ZOOM}
+            aria-label="Zoom Out"
           >
-            <X className="size-4" />
+            <Minus className="size-4" />
           </Button>
         </div>
 
         {/* Prev arrow */}
         {total > 1 ? (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="absolute top-1/2 left-3 z-20 size-10 -translate-y-1/2 rounded-full bg-foreground/70 text-background hover:bg-foreground/85 hover:text-background disabled:opacity-30"
-            onClick={stopAnd(goPrev)}
-            disabled={safeIndex === 0}
-            aria-label="Previous"
-          >
-            <ChevronLeft className="size-5" />
-          </Button>
+          <div className="absolute top-1/2 left-3 z-20 -translate-y-1/2">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-10 rounded-full border border-border bg-background text-foreground shadow-sm hover:bg-muted hover:text-foreground disabled:opacity-30"
+              onClick={stopAnd(goPrev)}
+              disabled={safeIndex === 0}
+              aria-label="Previous"
+            >
+              <ChevronLeft className="size-5" />
+            </Button>
+          </div>
         ) : null}
 
         {/* Image */}
@@ -339,16 +345,18 @@ export function Viewer({
 
         {/* Next arrow */}
         {total > 1 ? (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="absolute top-1/2 right-3 z-20 size-10 -translate-y-1/2 rounded-full bg-foreground/70 text-background hover:bg-foreground/85 hover:text-background disabled:opacity-30"
-            onClick={stopAnd(goNext)}
-            disabled={safeIndex >= total - 1}
-            aria-label="Next"
-          >
-            <ChevronRight className="size-5" />
-          </Button>
+          <div className="absolute top-1/2 right-3 z-20 -translate-y-1/2">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-10 rounded-full border border-border bg-background text-foreground shadow-sm hover:bg-muted hover:text-foreground disabled:opacity-30"
+              onClick={stopAnd(goNext)}
+              disabled={safeIndex >= total - 1}
+              aria-label="Next"
+            >
+              <ChevronRight className="size-5" />
+            </Button>
+          </div>
         ) : null}
       </div>
 
@@ -359,6 +367,7 @@ export function Viewer({
           imageId={current.id}
           view={view}
           onRemoved={handleRemoved}
+          onClose={closeWithCurrent}
         />
       </aside>
     </div>

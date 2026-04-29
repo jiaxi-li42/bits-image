@@ -17,7 +17,7 @@ export function RestoreAction() {
     startTransition(async () => {
       const res = await restoreImages(ids);
       toast(
-        `Restored ${res.restored} ${res.restored === 1 ? "photo" : "photos"}`,
+        `${res.restored} ${res.restored === 1 ? "image" : "images"} restored`,
       );
       clear();
     });
