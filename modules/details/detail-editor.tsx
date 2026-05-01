@@ -11,16 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { ConfirmDeleteDialog } from "@/modules/shell/confirm-delete-dialog";
 import { TagPicker } from "@/modules/tags";
 import { FolderPicker } from "@/modules/folders";
 import { getDownloadUrl } from "@/modules/actions/server";
@@ -160,13 +151,10 @@ export function DetailEditor({
     });
   };
 
-  const onHardDelete = () => {
-    startTransition(async () => {
-      await hardDeleteImages([imageId]);
-      toast("Deleted permanently");
-      setConfirmPurge(false);
-      onRemoved?.();
-    });
+  const onHardDelete = async () => {
+    await hardDeleteImages([imageId]);
+    toast("Deleted permanently");
+    onRemoved?.();
   };
 
   return (
@@ -322,22 +310,13 @@ export function DetailEditor({
         ) : null}
       </footer>
 
-      <AlertDialog open={confirmPurge} onOpenChange={setConfirmPurge}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete permanently?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This removes the image from storage. It cannot be restored.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={onHardDelete}>
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDeleteDialog
+        open={confirmPurge}
+        onOpenChange={setConfirmPurge}
+        title="Delete permanently?"
+        description="This removes the image from storage. It cannot be restored."
+        onConfirm={onHardDelete}
+      />
     </form>
   );
 }

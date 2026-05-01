@@ -2,12 +2,14 @@
 
 import { usePathname } from "next/navigation";
 import { Tag as TagIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
 import {
   SidebarMenu,
   SidebarMenuBadge,
   SidebarMenuItem,
   SidebarMenuLink,
 } from "@/components/ui/sidebar";
+import { SIDEBAR_LINK_DENSE } from "@/modules/shell/app-sidebar";
 import type { TagWithCount } from "./server";
 
 export function TagSidebar({
@@ -36,7 +38,7 @@ export function TagSidebar({
               href={href}
               onClick={onNavigate}
               isActive={active}
-              className="pr-7 md:h-7 md:py-1 md:text-[0.8rem]"
+              className={cn("pr-7", SIDEBAR_LINK_DENSE)}
             >
               <TagIcon />
               <span className="flex-1 truncate">{t.name}</span>

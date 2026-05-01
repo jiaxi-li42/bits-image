@@ -81,9 +81,14 @@ export function Viewer({
     setPan({ x: 0, y: 0 });
   }, [safeIndex]);
 
-  // Warm the browser's image cache for the neighbours so navigating
-  // (mobile swipe / desktop arrow) shows their bytes instantly.
+  // Warm the browser's image cache for the neighbours on desktop so
+  // arrow-nav shows their bytes instantly. Mobile already renders the
+  // prev/next <img>s as off-screen swipe slots, so the bytes are
+  // requested anyway — skip the redundant <link rel="preload"> there.
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(min-width: 768px)");
+    if (!mq.matches) return;
     const neighbours = [
       safeIndex > 0 ? images[safeIndex - 1] : null,
       safeIndex < total - 1 ? images[safeIndex + 1] : null,

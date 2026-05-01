@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { SwatchBook } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
 import { FLOATING_BUTTON_CLASS } from "@/modules/shell/mobile-floating-actions";
-import { listTags, type TagWithCount } from "@/modules/tags";
+import { useShell } from "@/modules/shell/shell-context";
 import {
   applyTagDiffToImages,
   getTagStatesForImages,
@@ -42,8 +42,8 @@ export function EditTagsAction({
   variant?: "inline" | "floating";
 }) {
   const { selected, count } = useManage();
+  const { tags: allTags } = useShell();
   const [open, setOpen] = useState(false);
-  const [allTags, setAllTags] = useState<TagWithCount[]>([]);
   const [initial, setInitial] = useState<Map<string, Tri>>(new Map());
   const [current, setCurrent] = useState<Map<string, Tri>>(new Map());
   const [loading, setLoading] = useState(false);
@@ -51,27 +51,44 @@ export function EditTagsAction({
 
   const ids = useMemo(() => Array.from(selected), [selected]);
   const total = ids.length;
+  const idsSig = useMemo(() => [...ids].sort().join(","), [ids]);
+  // Last selection signature whose data we've already loaded — re-opening
+  // the popover with the same selection re-uses the in-memory snapshot
+  // instead of refetching tags + per-image state.
+  const cachedSigRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
+    if (cachedSigRef.current === idsSig) {
+      // Cache hit — reset any uncommitted tri-state edits from a previous
+      // open back to the loaded baseline so Cancel-then-reopen behaves
+      // like a fresh open.
+      setCurrent(new Map(initial));
+      return;
+    }
     let cancelled = false;
     setLoading(true);
-    Promise.all([listTags(), getTagStatesForImages(ids)]).then(
-      ([tags, stats]) => {
-        if (cancelled) return;
-        const byId = new Map(stats.map((s) => [s.id, s]));
-        const map = new Map<string, Tri>();
-        for (const t of tags) map.set(t.id, deriveInitial(byId.get(t.id), total));
-        setAllTags(tags);
-        setInitial(map);
-        setCurrent(new Map(map));
-        setLoading(false);
-      },
-    );
+    getTagStatesForImages(ids).then((stats) => {
+      if (cancelled) return;
+      const byId = new Map(stats.map((s) => [s.id, s]));
+      const map = new Map<string, Tri>();
+      for (const t of allTags) {
+        map.set(t.id, deriveInitial(byId.get(t.id), total));
+      }
+      setInitial(map);
+      setCurrent(new Map(map));
+      setLoading(false);
+      cachedSigRef.current = idsSig;
+    });
     return () => {
       cancelled = true;
     };
-  }, [open, ids, total]);
+    // allTags is intentionally not in deps — if a tag is added globally
+    // while the popover is open we don't refetch state; the user can
+    // reopen the popover to pick up the new tag. listing it as a dep would
+    // refetch on every shell revalidation (e.g. unrelated folder edits).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, ids, total, idsSig]);
 
   const cycle = (tagId: string) => {
     setCurrent((prev) => {

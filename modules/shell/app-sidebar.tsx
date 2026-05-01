@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Plus, User } from "lucide-react";
+import { Layers2, Plus } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -23,7 +23,12 @@ import { useCreateEntity } from "./create-entity-context";
 import { NAV_ITEMS } from "./nav-items";
 import { useShell } from "./shell-context";
 
-const APP_VERSION = "v0.9";
+const APP_VERSION = "v1.0";
+
+// Tighter row metrics for desktop sidebar links (folders / tags). Mobile
+// keeps the default touch-friendly height; desktop tightens to fit more
+// rows in the same vertical space. Shared across folder / tag sidebars.
+export const SIDEBAR_LINK_DENSE = "md:h-7 md:py-1 md:text-[0.8rem]";
 
 export function AppSidebar() {
   const pathname = usePathname();
@@ -54,7 +59,7 @@ export function AppSidebar() {
           className="flex items-center gap-3 rounded-md p-2 hover:bg-sidebar-accent"
         >
           <div className="flex size-9 items-center justify-center rounded-full bg-muted">
-            <User className="size-4 text-muted-foreground" />
+            <Layers2 className="size-4 text-muted-foreground" />
           </div>
           <div className="leading-tight">
             <div className="text-sm font-semibold">Bits Image</div>

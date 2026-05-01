@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
-import { Plus, X } from "lucide-react";
+import { useEffect, useMemo, useState, useTransition } from "react";
+import { Plus } from "lucide-react";
 import { toast } from "sonner";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -18,42 +17,49 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import { useShell } from "@/modules/shell/shell-context";
+import { TagChip } from "./tag-chip";
 import {
   assignTag,
   assignTagByName,
-  listTags,
   listTagsForImage,
   unassignTag,
   type Tag,
-  type TagWithCount,
 } from "./server";
 
 export function TagPicker({ imageId }: { imageId: string }) {
+  // Global tag list comes from the shell provider — server-rendered and
+  // refreshed automatically via revalidatePath whenever a tag is created,
+  // renamed, or deleted (see modules/tags/server.ts:revalidateAllViews).
+  const { tags: all } = useShell();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [assigned, setAssigned] = useState<Tag[]>([]);
-  const [all, setAll] = useState<TagWithCount[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loadingAssigned, setLoadingAssigned] = useState(true);
   const [, startTransition] = useTransition();
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([listTagsForImage(imageId), listTags()]).then(([forImage, allTags]) => {
+    listTagsForImage(imageId).then((forImage) => {
       if (cancelled) return;
       setAssigned(forImage);
-      setAll(allTags);
-      setLoading(false);
+      setLoadingAssigned(false);
     });
     return () => {
       cancelled = true;
     };
   }, [imageId]);
 
-  const assignedIds = new Set(assigned.map((t) => t.id));
+  const assignedIds = useMemo(
+    () => new Set(assigned.map((t) => t.id)),
+    [assigned],
+  );
   const trimmed = query.trim().toLowerCase();
-  const filtered = all.filter((t) => t.name.includes(trimmed));
-  const exact = filtered.find((t) => t.name === trimmed);
-  const canCreate = trimmed.length > 0 && !exact;
+  const { filtered, canCreate } = useMemo(() => {
+    const f = all.filter((t) => t.name.includes(trimmed));
+    const exact = f.find((t) => t.name === trimmed);
+    return { filtered: f, canCreate: trimmed.length > 0 && !exact };
+  }, [all, trimmed]);
 
   const onAssign = (tag: Tag) => {
     if (assignedIds.has(tag.id)) return;
@@ -80,17 +86,13 @@ export function TagPicker({ imageId }: { imageId: string }) {
         toast.error(res.message);
         return;
       }
+      // Optimistically reflect the assignment for this image. The new tag
+      // itself appears in the global `all` list once revalidatePath
+      // re-renders the shell.
       setAssigned((prev) =>
         prev.some((t) => t.id === res.tag.id)
           ? prev
           : [...prev, res.tag].sort((a, b) => a.name.localeCompare(b.name)),
-      );
-      setAll((prev) =>
-        prev.some((t) => t.id === res.tag.id)
-          ? prev
-          : [...prev, { ...res.tag, count: 1 }].sort((a, b) =>
-              a.name.localeCompare(b.name),
-            ),
       );
     });
   };
@@ -109,7 +111,7 @@ export function TagPicker({ imageId }: { imageId: string }) {
         <PopoverContent className="w-64 p-0" align="start">
           <Command shouldFilter={false}>
             <CommandInput
-              placeholder={loading ? "Loading…" : "Search or create…"}
+              placeholder={loadingAssigned ? "Loading…" : "Search or create…"}
               value={query}
               onValueChange={setQuery}
               onKeyDown={(e) => {
@@ -120,7 +122,7 @@ export function TagPicker({ imageId }: { imageId: string }) {
               }}
             />
             <CommandList>
-              <CommandEmpty>{loading ? "Loading…" : "No tags."}</CommandEmpty>
+              <CommandEmpty>{loadingAssigned ? "Loading…" : "No tags."}</CommandEmpty>
               {filtered.length > 0 ? (
                 <CommandGroup heading="Tags">
                   {filtered.map((t) => {
@@ -154,17 +156,12 @@ export function TagPicker({ imageId }: { imageId: string }) {
         </PopoverContent>
       </Popover>
       {assigned.map((t) => (
-        <Badge key={t.id} variant="secondary" size="md" className="pr-1">
-          {t.name}
-          <button
-            type="button"
-            onClick={() => onUnassign(t)}
-            className="rounded-full p-0.5 hover:bg-muted-foreground/20"
-            aria-label={`Remove Tag ${t.name}`}
-          >
-            <X className="size-3" />
-          </button>
-        </Badge>
+        <TagChip
+          key={t.id}
+          name={t.name}
+          onRemove={() => onUnassign(t)}
+          removeAriaLabel={`Remove Tag ${t.name}`}
+        />
       ))}
     </div>
   );

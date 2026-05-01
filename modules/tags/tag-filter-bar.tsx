@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Filter, X } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { Filter } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -20,26 +19,16 @@ import {
 } from "@/components/ui/command";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
-import { listTags, type TagWithCount } from "./server";
+import { useShell } from "@/modules/shell/shell-context";
+import { TagChip } from "./tag-chip";
 
 export function TagFilterBar({ excludeTagId }: { excludeTagId?: string }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [all, setAll] = useState<TagWithCount[]>([]);
+  const { tags: all } = useShell();
   const [open, setOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [mode, setMode] = useState<"and" | "or">("and");
-
-  useEffect(() => {
-    let cancelled = false;
-    listTags().then((t) => {
-      if (cancelled) return;
-      setAll(t);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   // Filter is session-only. On mount (and whenever the route changes) strip
   // any persisted ?tags / ?mode from the URL and reset local state. Selecting
@@ -133,25 +122,13 @@ export function TagFilterBar({ excludeTagId }: { excludeTagId?: string }) {
                 </>
               ) : (
                 selected.map((t) => (
-                  <Badge
+                  <TagChip
                     key={t.id}
-                    variant="secondary"
-                    className="max-w-full gap-1 rounded-sm py-0 pr-0.5 pl-1.5"
-                  >
-                    <span className="truncate">{t.name}</span>
-                    <span
-                      role="button"
-                      tabIndex={-1}
-                      aria-label={`Remove Filter ${t.name}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggle(t.id);
-                      }}
-                      className="shrink-0 rounded p-0.5 hover:bg-muted-foreground/20"
-                    >
-                      <X className="size-3" />
-                    </span>
-                  </Badge>
+                    name={t.name}
+                    density="compact"
+                    onRemove={() => toggle(t.id)}
+                    removeAriaLabel={`Remove Filter ${t.name}`}
+                  />
                 ))
               )}
             </Button>

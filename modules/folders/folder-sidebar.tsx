@@ -12,6 +12,7 @@ import {
   SidebarMenuItem,
   SidebarMenuLink,
 } from "@/components/ui/sidebar";
+import { SIDEBAR_LINK_DENSE } from "@/modules/shell/app-sidebar";
 import type { FolderNode } from "./server";
 
 export function FolderSidebar({
@@ -138,11 +139,7 @@ export function FolderSidebar({
                 title={f.path}
                 onClick={onNavigate}
                 isActive={active}
-                className={cn(
-                  "min-w-0 flex-1 pr-7",
-                  // Tighter row on desktop where space is at a premium.
-                  "md:h-7 md:py-1 md:text-[0.8rem]",
-                )}
+                className={cn("min-w-0 flex-1 pr-7", SIDEBAR_LINK_DENSE)}
               >
                 <FolderIcon />
                 <span className="flex-1 truncate">{f.name}</span>

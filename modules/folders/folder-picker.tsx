@@ -50,6 +50,18 @@ export function FolderPicker({ imageId }: { imageId: string }) {
     () => new Map(all.map((f) => [f.id, f.path])),
     [all],
   );
+  // Children index lets descendantsOf walk the tree in O(n) instead of
+  // re-scanning `all` for each parent on every click.
+  const childrenByParentId = useMemo(() => {
+    const m = new Map<string, FolderNode[]>();
+    for (const f of all) {
+      if (!f.parentId) continue;
+      const arr = m.get(f.parentId);
+      if (arr) arr.push(f);
+      else m.set(f.parentId, [f]);
+    }
+    return m;
+  }, [all]);
 
   function ancestorsOf(folderId: string): FolderNode[] {
     const out: FolderNode[] = [];
@@ -68,11 +80,11 @@ export function FolderPicker({ imageId }: { imageId: string }) {
     const stack = [folderId];
     while (stack.length) {
       const parentId = stack.pop()!;
-      for (const f of all) {
-        if (f.parentId === parentId) {
-          out.push(f);
-          stack.push(f.id);
-        }
+      const children = childrenByParentId.get(parentId);
+      if (!children) continue;
+      for (const c of children) {
+        out.push(c);
+        stack.push(c.id);
       }
     }
     return out;

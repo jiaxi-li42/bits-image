@@ -2,18 +2,10 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { FolderPlus, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { FolderPlus } from "lucide-react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { ConfirmDeleteDialog } from "@/modules/shell/confirm-delete-dialog";
 import { CreateEntityDialog } from "@/modules/shell/create-entity-dialog";
-import { RenameDialog } from "@/modules/shell/rename-dialog";
+import { EntityActionsMenu } from "@/modules/shell/entity-actions-menu";
 import { createFolder, deleteFolder, renameFolder } from "./server";
 import { MAX_FOLDER_DEPTH } from "./constants";
 
@@ -24,18 +16,12 @@ export function FolderHeaderActions({
   folder: { id: string; name: string };
   depth: number;
 }) {
-  const canAddSubfolder = depth < MAX_FOLDER_DEPTH;
   const router = useRouter();
-  const [renaming, setRenaming] = useState(false);
   const [creatingSub, setCreatingSub] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const onRename = async (trimmed: string) => {
     const res = await renameFolder(folder.id, trimmed);
-    if (res.status === "ok") {
-      toast("Folder renamed");
-      router.refresh();
-    } else {
+    if (res.status === "error") {
       toast.error(res.message);
       return false;
     }
@@ -54,44 +40,28 @@ export function FolderHeaderActions({
 
   const onDelete = async () => {
     await deleteFolder(folder.id);
-    toast("Folder deleted");
     router.push("/library");
   };
 
   return (
     <>
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          render={
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label="Folder actions"
-            >
-              <MoreHorizontal className="size-4" />
-            </Button>
-          }
-        />
-        <DropdownMenuContent align="start" className="min-w-fit">
-          {canAddSubfolder ? (
-            <DropdownMenuItem onClick={() => setCreatingSub(true)}>
-              <FolderPlus />
-              Add Subfolder
-            </DropdownMenuItem>
-          ) : null}
-          <DropdownMenuItem onClick={() => setRenaming(true)}>
-            <Pencil />
-            Rename
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            variant="destructive"
-            onClick={() => setConfirmDelete(true)}
-          >
-            <Trash2 />
-            Delete Folder
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <EntityActionsMenu
+        entity={folder}
+        kind="folder"
+        extras={[
+          {
+            icon: FolderPlus,
+            label: "Add Subfolder",
+            onSelect: () => setCreatingSub(true),
+            enabled: depth < MAX_FOLDER_DEPTH,
+          },
+        ]}
+        onRename={onRename}
+        onDelete={onDelete}
+        renameToast="Folder renamed"
+        deleteToast="Folder deleted"
+        deleteDescription="The folder and any subfolders will be removed. Images inside are not deleted."
+      />
 
       <CreateEntityDialog
         open={creatingSub}
@@ -105,23 +75,6 @@ export function FolderHeaderActions({
         }
         placeholder="Subfolder name"
         onCreate={onCreateSub}
-      />
-
-      <RenameDialog
-        open={renaming}
-        onOpenChange={setRenaming}
-        title="Rename folder"
-        description="Images already in this folder stay assigned."
-        initialName={folder.name}
-        onRename={onRename}
-      />
-
-      <ConfirmDeleteDialog
-        open={confirmDelete}
-        onOpenChange={setConfirmDelete}
-        title="Delete this folder?"
-        description="The folder and any subfolders will be removed. Images inside are not deleted."
-        onConfirm={onDelete}
       />
     </>
   );

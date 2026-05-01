@@ -14,3 +14,4 @@ export { TagPicker } from "./tag-picker";
 export { TagSidebar } from "./tag-sidebar";
 export { TagFilterBar } from "./tag-filter-bar";
 export { TagHeaderActions } from "./tag-header-actions";
+export { TagChip } from "./tag-chip";

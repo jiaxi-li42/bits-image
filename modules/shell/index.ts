@@ -10,3 +10,8 @@ export { RenameDialog } from "./rename-dialog";
 export type { RenameDialogProps } from "./rename-dialog";
 export { ConfirmDeleteDialog } from "./confirm-delete-dialog";
 export type { ConfirmDeleteDialogProps } from "./confirm-delete-dialog";
+export { EntityActionsMenu } from "./entity-actions-menu";
+export type {
+  EntityActionsMenuProps,
+  EntityActionsExtraItem,
+} from "./entity-actions-menu";

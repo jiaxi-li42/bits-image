@@ -45,7 +45,7 @@ export function SearchBar() {
         placeholder="Search images..."
         value={value}
         onChange={(e) => setValue(e.target.value)}
-        className="h-7 rounded-md pl-7 pr-7 text-[0.8rem] font-medium"
+        className="h-7 rounded-md pl-7 pr-7 font-medium"
       />
       {value ? (
         <Button
