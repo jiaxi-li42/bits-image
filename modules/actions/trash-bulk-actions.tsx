@@ -16,9 +16,16 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { FLOATING_BUTTON_CLASS } from "@/modules/shell/mobile-floating-actions";
 import { emptyTrash } from "./server";
 
-export function TrashEmptyButton({ disabled }: { disabled?: boolean }) {
+export function TrashEmptyButton({
+  disabled,
+  variant = "inline",
+}: {
+  disabled?: boolean;
+  variant?: "inline" | "floating";
+}) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
@@ -36,10 +43,22 @@ export function TrashEmptyButton({ disabled }: { disabled?: boolean }) {
     <AlertDialog open={open} onOpenChange={setOpen}>
       <AlertDialogTrigger
         render={
-          <Button variant="destructive" size="sm" disabled={disabled}>
-            <Trash2 className="size-4" />
-            Empty Trash
-          </Button>
+          variant === "floating" ? (
+            <Button
+              variant="destructive"
+              size="icon"
+              disabled={disabled}
+              aria-label="Empty Trash"
+              className={FLOATING_BUTTON_CLASS}
+            >
+              <Trash2 />
+            </Button>
+          ) : (
+            <Button variant="destructive" size="sm" disabled={disabled}>
+              <Trash2 className="size-4" />
+              Empty Trash
+            </Button>
+          )
         }
       />
       <AlertDialogContent>

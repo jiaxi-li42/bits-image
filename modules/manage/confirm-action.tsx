@@ -13,6 +13,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { FLOATING_BUTTON_CLASS } from "@/modules/shell/mobile-floating-actions";
+import { cn } from "@/lib/utils";
 import { useManage } from "./manage-context";
 
 type ConfirmActionProps = {
@@ -25,6 +27,8 @@ type ConfirmActionProps = {
   pendingLabel: string;
   successToast: (n: number) => string;
   run: (ids: string[]) => Promise<{ count: number }>;
+  variant?: "inline" | "floating";
+  destructive?: boolean;
 };
 
 /**
@@ -44,6 +48,8 @@ export function ConfirmAction({
   pendingLabel,
   successToast,
   run,
+  variant = "inline",
+  destructive = false,
 }: ConfirmActionProps) {
   const { selected, count, clear } = useManage();
   const [open, setOpen] = useState(false);
@@ -62,17 +68,31 @@ export function ConfirmAction({
 
   return (
     <>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        disabled={count === 0}
-        onClick={() => setOpen(true)}
-        className={triggerClassName}
-      >
-        {triggerIcon}
-        {triggerLabel}
-      </Button>
+      {variant === "floating" ? (
+        <Button
+          type="button"
+          size="icon"
+          variant={destructive ? "destructive" : "default"}
+          disabled={count === 0}
+          onClick={() => setOpen(true)}
+          aria-label={triggerLabel}
+          className={cn(FLOATING_BUTTON_CLASS, triggerClassName)}
+        >
+          {triggerIcon}
+        </Button>
+      ) : (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={count === 0}
+          onClick={() => setOpen(true)}
+          className={triggerClassName}
+        >
+          {triggerIcon}
+          {triggerLabel}
+        </Button>
+      )}
       <AlertDialog open={open} onOpenChange={setOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>

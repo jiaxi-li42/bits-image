@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { FolderPlus } from "lucide-react";
+import { FolderInput, FolderPlus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,18 +14,22 @@ import {
   addImagesToFolder,
   moveImagesToFolder,
 } from "@/modules/folders/server";
+import { FLOATING_BUTTON_CLASS } from "@/modules/shell/mobile-floating-actions";
 import { useManage } from "./manage-context";
 
 export function MoveToFolderAction({
   currentFolderId,
+  variant = "inline",
 }: {
   currentFolderId?: string;
+  variant?: "inline" | "floating";
 }) {
   const { selected, count } = useManage();
   const [open, setOpen] = useState(false);
   const [, startTransition] = useTransition();
   const isMove = Boolean(currentFolderId);
   const label = isMove ? "Move to Folder" : "Add to Folder";
+  const Icon = isMove ? FolderInput : FolderPlus;
 
   const excludeIds = useMemo(
     () => (currentFolderId ? new Set([currentFolderId]) : undefined),
@@ -67,15 +71,28 @@ export function MoveToFolderAction({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
         render={
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={count === 0}
-          >
-            <FolderPlus className="size-4" />
-            {label}
-          </Button>
+          variant === "floating" ? (
+            <Button
+              type="button"
+              variant="secondary"
+              size="icon"
+              disabled={count === 0}
+              aria-label={label}
+              className={FLOATING_BUTTON_CLASS}
+            >
+              <Icon />
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={count === 0}
+            >
+              <Icon className="size-4" />
+              {label}
+            </Button>
+          )
         }
       />
       <PopoverContent className="w-72 p-0" align="start" side="top">

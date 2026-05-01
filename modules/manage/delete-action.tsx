@@ -5,13 +5,21 @@ import { ConfirmAction } from "./confirm-action";
 import { useManage } from "./manage-context";
 import { softDeleteImages } from "./server";
 
-export function DeleteAction() {
+export function DeleteAction({
+  variant = "inline",
+}: {
+  variant?: "inline" | "floating";
+}) {
   const { count } = useManage();
   return (
     <ConfirmAction
+      variant={variant}
+      destructive
       triggerLabel="Delete"
-      triggerIcon={<Trash2 className="size-4" />}
-      triggerClassName="text-destructive hover:text-destructive"
+      triggerIcon={<Trash2 className={variant === "floating" ? undefined : "size-4"} />}
+      triggerClassName={
+        variant === "floating" ? undefined : "text-destructive hover:text-destructive"
+      }
       title="Move to Trash?"
       description={
         <>

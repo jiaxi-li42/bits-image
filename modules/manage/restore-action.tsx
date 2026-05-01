@@ -4,10 +4,15 @@ import { useTransition } from "react";
 import { RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { FLOATING_BUTTON_CLASS } from "@/modules/shell/mobile-floating-actions";
 import { restoreImages } from "./server";
 import { useManage } from "./manage-context";
 
-export function RestoreAction() {
+export function RestoreAction({
+  variant = "inline",
+}: {
+  variant?: "inline" | "floating";
+}) {
   const { selected, count, clear } = useManage();
   const [pending, startTransition] = useTransition();
 
@@ -22,6 +27,22 @@ export function RestoreAction() {
       clear();
     });
   };
+
+  if (variant === "floating") {
+    return (
+      <Button
+        type="button"
+        variant="secondary"
+        size="icon"
+        disabled={count === 0 || pending}
+        onClick={onClick}
+        aria-label="Restore"
+        className={FLOATING_BUTTON_CLASS}
+      >
+        <RotateCcw />
+      </Button>
+    );
+  }
 
   return (
     <Button

@@ -1,17 +1,25 @@
 "use client";
 
-import { Trash2 } from "lucide-react";
+import { Trash } from "lucide-react";
 import { ConfirmAction } from "./confirm-action";
 import { useManage } from "./manage-context";
 import { hardDeleteImages } from "./server";
 
-export function HardDeleteAction() {
+export function HardDeleteAction({
+  variant = "inline",
+}: {
+  variant?: "inline" | "floating";
+}) {
   const { count } = useManage();
   return (
     <ConfirmAction
+      variant={variant}
+      destructive
       triggerLabel="Delete Permanently"
-      triggerIcon={<Trash2 className="size-4" />}
-      triggerClassName="text-destructive hover:text-destructive"
+      triggerIcon={<Trash className={variant === "floating" ? undefined : "size-4"} />}
+      triggerClassName={
+        variant === "floating" ? undefined : "text-destructive hover:text-destructive"
+      }
       title="Delete permanently?"
       description={
         <>

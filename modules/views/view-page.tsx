@@ -1,4 +1,5 @@
 import { ViewHeader, EmptyState } from "@/modules/shell";
+import { MobileFloatingActions } from "@/modules/shell/mobile-floating-actions";
 import { UploadButton } from "@/modules/ingestion";
 import { TrashEmptyButton } from "@/modules/actions";
 import { SearchBar } from "@/modules/search";
@@ -108,13 +109,13 @@ export async function ViewPage({
             ) : null
           }
         />
-        {/* Toolbar row: filter (where applicable) on the left;
-            search + Manage + Upload on the right. */}
+        {/* Toolbar row: filter (where applicable) on the left.
+            On desktop, search + Manage + Upload cluster on the right.
+            On mobile, search lives in the header and Manage/Upload are FABs
+            (see MobileFloatingActions below). */}
         <div className="flex flex-wrap items-start gap-2 px-4 pb-3 md:px-6">
-          <div className="flex flex-wrap items-start gap-2">
-            {showTagFilter ? <TagFilterBar excludeTagId={tag?.id} /> : null}
-          </div>
-          <div className="ml-auto flex flex-wrap items-start gap-2">
+          {showTagFilter ? <TagFilterBar excludeTagId={tag?.id} /> : null}
+          <div className="ml-auto hidden md:flex md:flex-wrap md:items-start md:gap-2">
             <SearchBar />
             <ManageBar />
             {view === "trash" ? (
@@ -143,6 +144,21 @@ export async function ViewPage({
           />
         )}
       </div>
+      <MobileFloatingActions>
+        <ManageBar variant="floating" />
+        {view === "trash" ? (
+          <TrashEmptyButton
+            disabled={items.length === 0}
+            variant="floating"
+          />
+        ) : (
+          <UploadButton
+            folderId={folder?.id}
+            tagId={tag?.id}
+            variant="floating"
+          />
+        )}
+      </MobileFloatingActions>
       <ManagePanel view={view} folderId={folder?.id} />
     </ManageProvider>
   );

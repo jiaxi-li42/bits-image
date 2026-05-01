@@ -37,7 +37,7 @@ export function SearchBar() {
   }, [value, params, router]);
 
   return (
-    <div className="relative w-72">
+    <div className="relative w-full md:w-72">
       <Search className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
       <Input
         type="text"
@@ -45,7 +45,7 @@ export function SearchBar() {
         placeholder="Search images..."
         value={value}
         onChange={(e) => setValue(e.target.value)}
-        className="h-7 rounded-md pl-7 pr-7"
+        className="h-7 rounded-md pl-7 pr-7 text-[0.8rem] font-medium"
       />
       {value ? (
         <Button

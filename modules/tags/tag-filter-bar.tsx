@@ -41,6 +41,28 @@ export function TagFilterBar({ excludeTagId }: { excludeTagId?: string }) {
     };
   }, []);
 
+  // Filter is session-only. On mount (and whenever the route changes) strip
+  // any persisted ?tags / ?mode from the URL and reset local state. Selecting
+  // tags during the session still updates the URL via update() — but a hard
+  // refresh or fresh navigation always starts clean.
+  //
+  // Both the URL strip and the state reset must happen here together: a
+  // separate URL-sync effect would read the still-stale URL before
+  // router.replace lands and re-populate state from the persisted params.
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    if (sp.has("tags") || sp.has("mode")) {
+      sp.delete("tags");
+      sp.delete("mode");
+      const qs = sp.toString();
+      router.replace(`${pathname}${qs ? `?${qs}` : ""}`, { scroll: false });
+    }
+    setSelectedIds([]);
+    setMode("and");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
+
+  // Sync state from URL on browser back/forward only.
   useEffect(() => {
     const sync = () => {
       const sp = new URLSearchParams(window.location.search);
@@ -49,10 +71,9 @@ export function TagFilterBar({ excludeTagId }: { excludeTagId?: string }) {
       const m = sp.get("mode");
       setMode(m === "or" ? "or" : "and");
     };
-    sync();
     window.addEventListener("popstate", sync);
     return () => window.removeEventListener("popstate", sync);
-  }, [pathname]);
+  }, []);
 
   const update = (next: { tagIds?: string[]; mode?: "and" | "or" }) => {
     const sp = new URLSearchParams(window.location.search);
@@ -85,7 +106,7 @@ export function TagFilterBar({ excludeTagId }: { excludeTagId?: string }) {
   if (visibleTags.length === 0 && selected.length === 0) return null;
 
   return (
-    <>
+    <div className="flex w-full min-w-0 flex-wrap items-start gap-2 md:w-auto">
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger
           render={
@@ -96,8 +117,9 @@ export function TagFilterBar({ excludeTagId }: { excludeTagId?: string }) {
               className={cn(
                 // Allow chips to wrap into multiple lines while keeping the
                 // base sm height as a floor. Left-align so chips don't drift
-                // to the centre when the trigger grows.
-                "h-auto min-h-7 min-w-[7rem] max-w-xs flex-wrap justify-start py-1",
+                // to the centre when the trigger grows. max-w-full so the
+                // trigger never extends past its container on small screens.
+                "h-auto min-h-7 min-w-[7rem] max-w-full flex-wrap justify-start py-1 md:max-w-xs",
                 selected.length > 0 &&
                   // When chips are present the trigger reads more like an
                   // input than a button — drop pointer/aria-expanded hover.
@@ -114,9 +136,9 @@ export function TagFilterBar({ excludeTagId }: { excludeTagId?: string }) {
                   <Badge
                     key={t.id}
                     variant="secondary"
-                    className="gap-1 rounded-sm py-0 pr-0.5 pl-1.5"
+                    className="max-w-full gap-1 rounded-sm py-0 pr-0.5 pl-1.5"
                   >
-                    {t.name}
+                    <span className="truncate">{t.name}</span>
                     <span
                       role="button"
                       tabIndex={-1}
@@ -125,7 +147,7 @@ export function TagFilterBar({ excludeTagId }: { excludeTagId?: string }) {
                         e.stopPropagation();
                         toggle(t.id);
                       }}
-                      className="rounded p-0.5 hover:bg-muted-foreground/20"
+                      className="shrink-0 rounded p-0.5 hover:bg-muted-foreground/20"
                     >
                       <X className="size-3" />
                     </span>
@@ -182,10 +204,10 @@ export function TagFilterBar({ excludeTagId }: { excludeTagId?: string }) {
       ) : null}
 
       {selectedIds.length > 0 ? (
-        <Button variant="ghost" size="sm" onClick={clear}>
+        <Button variant="ghost" size="sm" onClick={clear} className="ml-auto">
           Clear
         </Button>
       ) : null}
-    </>
+    </div>
   );
 }

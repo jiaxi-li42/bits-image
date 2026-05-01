@@ -19,6 +19,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
+import { FLOATING_BUTTON_CLASS } from "@/modules/shell/mobile-floating-actions";
 import { listTags, type TagWithCount } from "@/modules/tags";
 import {
   applyTagDiffToImages,
@@ -35,7 +36,11 @@ function deriveInitial(stat: TagStateForImages | undefined, total: number): Tri 
   return "some";
 }
 
-export function EditTagsAction() {
+export function EditTagsAction({
+  variant = "inline",
+}: {
+  variant?: "inline" | "floating";
+}) {
   const { selected, count } = useManage();
   const [open, setOpen] = useState(false);
   const [allTags, setAllTags] = useState<TagWithCount[]>([]);
@@ -105,15 +110,28 @@ export function EditTagsAction() {
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
         render={
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={count === 0}
-          >
-            <SwatchBook className="size-4" />
-            Edit Tags
-          </Button>
+          variant === "floating" ? (
+            <Button
+              type="button"
+              variant="secondary"
+              size="icon"
+              disabled={count === 0}
+              aria-label="Edit Tags"
+              className={FLOATING_BUTTON_CLASS}
+            >
+              <SwatchBook />
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={count === 0}
+            >
+              <SwatchBook className="size-4" />
+              Edit Tags
+            </Button>
+          )
         }
       />
       <PopoverContent className="w-72 p-0" align="start" side="top">

@@ -13,25 +13,38 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { FLOATING_BUTTON_CLASS } from "@/modules/shell/mobile-floating-actions";
 import { cn } from "@/lib/utils";
 import { ingestFile } from "./server";
 
 export function UploadButton({
   folderId,
   tagId,
+  variant = "inline",
 }: {
   folderId?: string;
   tagId?: string;
+  variant?: "inline" | "floating";
 } = {}) {
   const [open, setOpen] = useState(false);
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger
         render={
-          <Button size="sm">
-            <Upload className="size-4" />
-            Upload
-          </Button>
+          variant === "floating" ? (
+            <Button
+              size="icon"
+              aria-label="Upload"
+              className={FLOATING_BUTTON_CLASS}
+            >
+              <Upload />
+            </Button>
+          ) : (
+            <Button size="sm">
+              <Upload className="size-4" />
+              Upload
+            </Button>
+          )
         }
       />
       <DialogContent>
