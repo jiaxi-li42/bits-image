@@ -2,42 +2,20 @@
 
 import { X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
-
-export type TagChipDensity = "default" | "compact";
 
 export type TagChipProps = {
   name: string;
   onRemove: () => void;
-  /**
-   * `default` (h-7) lines up alongside Button size="sm" — used in the
-   * single-image TagPicker. `compact` is the tighter chip used inside
-   * the filter-bar trigger so multiple chips wrap cleanly.
-   */
-  density?: TagChipDensity;
   removeAriaLabel?: string;
 };
 
 /**
- * Shared "tag with × close" chip. Single source of truth for the
- * Badge + remove-button composition used by TagPicker and TagFilterBar.
+ * Shared "tag with × close" chip used by TagPicker for the list of
+ * assigned tags. Lines up alongside Button size="sm" (h-7).
  */
-export function TagChip({
-  name,
-  onRemove,
-  density = "default",
-  removeAriaLabel,
-}: TagChipProps) {
-  const isCompact = density === "compact";
+export function TagChip({ name, onRemove, removeAriaLabel }: TagChipProps) {
   return (
-    <Badge
-      variant="secondary"
-      size={isCompact ? "sm" : "md"}
-      className={cn(
-        "max-w-full",
-        isCompact ? "gap-1 rounded-sm py-0 pr-0.5 pl-1.5" : "pr-1",
-      )}
-    >
+    <Badge variant="secondary" size="md" className="max-w-full pr-1">
       <span className="truncate">{name}</span>
       <span
         role="button"

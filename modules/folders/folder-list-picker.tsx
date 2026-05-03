@@ -10,6 +10,11 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { listFolders, type FolderNode } from "./server";
 
 export type FolderListPickerProps = {
@@ -102,27 +107,32 @@ export function FolderListPicker({
               const isAssigned = assignedIds?.has(f.id) ?? false;
               const label = showTree ? f.name : f.path;
               return (
-                <CommandItem
-                  key={f.id}
-                  value={f.path}
-                  data-checked={isAssigned ? "true" : undefined}
-                  onSelect={() => onPick(f)}
-                  title={f.path}
-                >
-                  <span
-                    className="flex-1 truncate"
-                    style={
-                      showTree
-                        ? { paddingLeft: `${f.depth * 14}px` }
-                        : undefined
+                <Tooltip key={f.id}>
+                  <TooltipTrigger
+                    render={
+                      <CommandItem
+                        value={f.path}
+                        data-checked={isAssigned ? "true" : undefined}
+                        onSelect={() => onPick(f)}
+                      >
+                        <span
+                          className="flex-1 truncate"
+                          style={
+                            showTree
+                              ? { paddingLeft: `${f.depth * 14}px` }
+                              : undefined
+                          }
+                        >
+                          {label}
+                        </span>
+                        <span className="ml-2 text-xs text-muted-foreground">
+                          {f.count}
+                        </span>
+                      </CommandItem>
                     }
-                  >
-                    {label}
-                  </span>
-                  <span className="ml-2 text-xs text-muted-foreground">
-                    {f.count}
-                  </span>
-                </CommandItem>
+                  />
+                  <TooltipContent side="right">{f.path}</TooltipContent>
+                </Tooltip>
               );
             })}
           </CommandGroup>

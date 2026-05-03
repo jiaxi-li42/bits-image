@@ -9,6 +9,11 @@ import {
   SidebarMenuItem,
   SidebarMenuLink,
 } from "@/components/ui/sidebar";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { SIDEBAR_LINK_DENSE } from "@/modules/shell/app-sidebar";
 import type { TagWithCount } from "./server";
 
@@ -34,15 +39,22 @@ export function TagSidebar({
         const active = pathname === href;
         return (
           <SidebarMenuItem key={t.id}>
-            <SidebarMenuLink
-              href={href}
-              onClick={onNavigate}
-              isActive={active}
-              className={cn("pr-7", SIDEBAR_LINK_DENSE)}
-            >
-              <TagIcon />
-              <span className="flex-1 truncate">{t.name}</span>
-            </SidebarMenuLink>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <SidebarMenuLink
+                    href={href}
+                    onClick={onNavigate}
+                    isActive={active}
+                    className={cn("pr-7", SIDEBAR_LINK_DENSE)}
+                  >
+                    <TagIcon />
+                    <span className="flex-1 truncate">{t.name}</span>
+                  </SidebarMenuLink>
+                }
+              />
+              <TooltipContent side="right">{t.name}</TooltipContent>
+            </Tooltip>
             <SidebarMenuBadge>{t.count}</SidebarMenuBadge>
           </SidebarMenuItem>
         );

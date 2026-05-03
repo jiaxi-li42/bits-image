@@ -76,7 +76,10 @@ function CommandInput({
         <CommandPrimitive.Input
           data-slot="command-input"
           className={cn(
-            "w-full text-sm outline-hidden disabled:cursor-not-allowed disabled:opacity-50",
+            // Match Button size="sm" so the input lines up visually with
+            // adjacent triggers (Filter, Cancel, Apply, etc.) inside the
+            // popover.
+            "w-full text-[0.8rem] font-medium outline-hidden disabled:cursor-not-allowed disabled:opacity-50",
             className
           )}
           {...props}

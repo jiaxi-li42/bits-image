@@ -113,14 +113,6 @@ export function DetailEditor({
     handleSubmit(onSubmit)();
   };
 
-  // Save on Cmd/Ctrl+Enter as well.
-  const onKeyDown: React.KeyboardEventHandler<HTMLFormElement> = (e) => {
-    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-      e.preventDefault();
-      if (isDirty) handleSubmit(onSubmit)();
-    }
-  };
-
   const onDownload = async () => {
     const url = await getDownloadUrl(imageId);
     if (!url) {
@@ -168,7 +160,6 @@ export function DetailEditor({
     <form
       onSubmit={handleSubmit(onSubmit)}
       onBlur={autoSaveOnBlur}
-      onKeyDown={onKeyDown}
       className={`flex flex-col md:h-full ${className ?? ""}`}
     >
       <header className="hidden items-start justify-between gap-3 px-4 pt-4 pb-8 md:flex">

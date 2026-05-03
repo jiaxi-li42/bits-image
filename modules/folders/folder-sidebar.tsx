@@ -12,6 +12,11 @@ import {
   SidebarMenuItem,
   SidebarMenuLink,
 } from "@/components/ui/sidebar";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { SIDEBAR_LINK_DENSE } from "@/modules/shell/app-sidebar";
 import type { FolderNode } from "./server";
 
@@ -134,16 +139,22 @@ export function FolderSidebar({
               ) : (
                 <span className="size-6 shrink-0" aria-hidden />
               )}
-              <SidebarMenuLink
-                href={href}
-                title={f.path}
-                onClick={onNavigate}
-                isActive={active}
-                className={cn("min-w-0 flex-1 pr-7", SIDEBAR_LINK_DENSE)}
-              >
-                <FolderIcon />
-                <span className="flex-1 truncate">{f.name}</span>
-              </SidebarMenuLink>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <SidebarMenuLink
+                      href={href}
+                      onClick={onNavigate}
+                      isActive={active}
+                      className={cn("min-w-0 flex-1 pr-7", SIDEBAR_LINK_DENSE)}
+                    >
+                      <FolderIcon />
+                      <span className="flex-1 truncate">{f.name}</span>
+                    </SidebarMenuLink>
+                  }
+                />
+                <TooltipContent side="right">{f.path}</TooltipContent>
+              </Tooltip>
             </div>
             <SidebarMenuBadge className="right-2">{f.count}</SidebarMenuBadge>
           </SidebarMenuItem>

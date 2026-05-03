@@ -10,6 +10,11 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { FolderListPicker } from "./folder-list-picker";
 import {
   addImageToFolder,
@@ -162,17 +167,22 @@ export function FolderPicker({ imageId }: { imageId: string }) {
       {assigned.map((f) => {
         const path = pathById.get(f.id) ?? f.name;
         return (
-          <Badge
-            key={f.id}
-            variant="ghost"
-            size="md"
-            title={path}
-            // Read-only label, not interactive — neutralise the ghost hover.
-            className="hover:bg-transparent hover:text-foreground dark:hover:bg-transparent"
-          >
-            <FolderIcon className="size-3.5" />
-            {f.name}
-          </Badge>
+          <Tooltip key={f.id}>
+            <TooltipTrigger
+              render={
+                <Badge
+                  variant="ghost"
+                  size="md"
+                  // Read-only label, not interactive — neutralise the ghost hover.
+                  className="hover:bg-transparent hover:text-foreground dark:hover:bg-transparent"
+                >
+                  <FolderIcon className="size-3.5" />
+                  {f.name}
+                </Badge>
+              }
+            />
+            <TooltipContent>{path}</TooltipContent>
+          </Tooltip>
         );
       })}
     </div>

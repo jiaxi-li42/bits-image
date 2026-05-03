@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Filter } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -17,10 +18,9 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import { Separator } from "@/components/ui/separator";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { cn } from "@/lib/utils";
 import { useShell } from "@/modules/shell/shell-context";
-import { TagChip } from "./tag-chip";
 
 export function TagFilterBar({ excludeTagId }: { excludeTagId?: string }) {
   const router = useRouter();
@@ -103,34 +103,46 @@ export function TagFilterBar({ excludeTagId }: { excludeTagId?: string }) {
               type="button"
               variant="outline"
               size="sm"
-              className={cn(
-                // Allow chips to wrap into multiple lines while keeping the
-                // base sm height as a floor. Left-align so chips don't drift
-                // to the centre when the trigger grows. max-w-full so the
-                // trigger never extends past its container on small screens.
-                "h-auto min-h-7 min-w-[7rem] max-w-full flex-wrap justify-start py-1 md:max-w-xs",
-                selected.length > 0 &&
-                  // When chips are present the trigger reads more like an
-                  // input than a button — drop pointer/aria-expanded hover.
-                  "cursor-text hover:bg-background hover:text-foreground aria-expanded:bg-background aria-expanded:text-foreground",
-              )}
+              // Dashed border signals "click to add filters". Trigger stays
+              // a single sm-height row regardless of selection count — chip
+              // overflow lives in the inline summary on the right, never
+              // wraps the button itself.
+              //
+              // aria-expanded:* overrides keep the trigger looking like its
+              // default (resting) state while the popover is open, instead
+              // of darkening to the outline variant's active style.
+              className="border-dashed aria-expanded:bg-background aria-expanded:text-foreground dark:aria-expanded:bg-input/30"
             >
-              {selected.length === 0 ? (
+              <Filter className="size-3.5" />
+              Tag Filter
+              {selected.length > 0 ? (
                 <>
-                  <Filter className="size-3.5" />
-                  Filter by Tag
+                  <Separator orientation="vertical" className="mx-1 h-4" />
+                  {/* Below lg: just the count, to keep the trigger tight. */}
+                  <Badge
+                    size="sm"
+                    variant="secondary"
+                    className="lg:hidden"
+                  >
+                    {selected.length}
+                  </Badge>
+                  {/* lg+: inline names up to 2; collapse to a summary
+                      badge once the list would push the trigger wide. */}
+                  <div className="hidden gap-1 lg:flex">
+                    {selected.length > 2 ? (
+                      <Badge size="sm" variant="secondary">
+                        {selected.length} selected
+                      </Badge>
+                    ) : (
+                      selected.map((t) => (
+                        <Badge key={t.id} size="sm" variant="secondary">
+                          {t.name}
+                        </Badge>
+                      ))
+                    )}
+                  </div>
                 </>
-              ) : (
-                selected.map((t) => (
-                  <TagChip
-                    key={t.id}
-                    name={t.name}
-                    density="compact"
-                    onRemove={() => toggle(t.id)}
-                    removeAriaLabel={`Remove Filter ${t.name}`}
-                  />
-                ))
-              )}
+              ) : null}
             </Button>
           }
         />

@@ -17,6 +17,11 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useShell } from "@/modules/shell/shell-context";
 import { TagChip } from "./tag-chip";
 import {
@@ -128,17 +133,25 @@ export function TagPicker({ imageId }: { imageId: string }) {
                   {filtered.map((t) => {
                     const isAssigned = assignedIds.has(t.id);
                     return (
-                      <CommandItem
-                        key={t.id}
-                        value={t.name}
-                        data-checked={isAssigned ? "true" : "false"}
-                        onSelect={() => (isAssigned ? onUnassign(t) : onAssign(t))}
-                      >
-                        <span className="flex-1 truncate">{t.name}</span>
-                        <span className="ml-2 text-xs text-muted-foreground">
-                          {t.count}
-                        </span>
-                      </CommandItem>
+                      <Tooltip key={t.id}>
+                        <TooltipTrigger
+                          render={
+                            <CommandItem
+                              value={t.name}
+                              data-checked={isAssigned ? "true" : "false"}
+                              onSelect={() =>
+                                isAssigned ? onUnassign(t) : onAssign(t)
+                              }
+                            >
+                              <span className="flex-1 truncate">{t.name}</span>
+                              <span className="ml-2 text-xs text-muted-foreground">
+                                {t.count}
+                              </span>
+                            </CommandItem>
+                          }
+                        />
+                        <TooltipContent side="right">{t.name}</TooltipContent>
+                      </Tooltip>
                     );
                   })}
                 </CommandGroup>

@@ -13,6 +13,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { FLOATING_BUTTON_CLASS } from "@/modules/shell/mobile-floating-actions";
 import { cn } from "@/lib/utils";
 import { ingestFile } from "./server";
@@ -203,9 +208,16 @@ function UploadDropzone({
               key={e.id}
               className="flex min-w-0 items-center justify-between gap-3 border-b px-3 py-2 last:border-b-0"
             >
-              <span className="min-w-0 flex-1 truncate" title={e.file.name}>
-                {e.file.name}
-              </span>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <span className="min-w-0 flex-1 truncate">
+                      {e.file.name}
+                    </span>
+                  }
+                />
+                <TooltipContent>{e.file.name}</TooltipContent>
+              </Tooltip>
               <span
                 className={cn(
                   "shrink-0 text-xs",
