@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AppShell } from "@/modules/shell";
@@ -16,7 +16,19 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Bits Image",
-  description: "Photography inspiration library",
+  description: "Keep collecting, stay inspired.",
+};
+
+// Disable the browser's native pinch-to-zoom and iOS double-tap-to-zoom.
+// The image viewer implements its own pinch-zoom on top of touch events
+// + CSS transforms (modules/viewer/viewer.tsx), which is independent of
+// the browser's visual viewport — so disabling user-scaling here does
+// not affect the in-viewer zoom experience.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 };
 
 export default function RootLayout({

@@ -14,6 +14,10 @@ const ZOOM_STEP = 1.4;
 const SWIPE_THRESHOLD = 50;
 // Animation duration for the swipe commit / cancel slide.
 const SWIPE_ANIM_MS = 180;
+// Multiplier on finger / mouse delta when panning a zoomed-in image. >1
+// means a smaller gesture covers more of the (scaled) image — feels
+// snappier on small screens where reach is limited.
+const PAN_SENSITIVITY = 1.5;
 
 export type ViewerProps = {
   images: GridImage[];
@@ -34,6 +38,11 @@ export function Viewer({
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
+  // Mobile-only "fill the viewport" view, decoupled from zoom so a tap
+  // can enter fullscreen at the natural fit (no upscaling). Pinch /
+  // double-tap still operate on `zoom`; both states are cleared together
+  // when the user taps out.
+  const [fullscreen, setFullscreen] = useState(false);
   // Live horizontal offset during a swipe-to-navigate gesture (mobile).
   const [swipeDx, setSwipeDx] = useState(0);
   // Tracks whether a swipe-related transform should animate (CSS transition
@@ -45,12 +54,16 @@ export function Viewer({
   // fresh values across rapid events without depending on React's batching.
   const zoomRef = useRef(zoom);
   const panRef = useRef(pan);
+  const fullscreenRef = useRef(fullscreen);
   useEffect(() => {
     zoomRef.current = zoom;
   }, [zoom]);
   useEffect(() => {
     panRef.current = pan;
   }, [pan]);
+  useEffect(() => {
+    fullscreenRef.current = fullscreen;
+  }, [fullscreen]);
 
   const total = images.length;
 
@@ -75,10 +88,11 @@ export function Viewer({
     else onClose("");
   }, [current, onClose]);
 
-  // Reset zoom + pan when image changes.
+  // Reset zoom + pan + fullscreen when image changes.
   useEffect(() => {
     setZoom(1);
     setPan({ x: 0, y: 0 });
+    setFullscreen(false);
   }, [safeIndex]);
 
   // Warm the browser's image cache for the neighbours on desktop so
@@ -261,6 +275,12 @@ export function Viewer({
       panY: number;
     };
     let g: Pinch | SingleZoomed | null = null;
+    // Tap-to-enter-fullscreen tracking (mobile, zoom===1 only). Movement
+    // beyond TAP_MAX_PX disqualifies the gesture as a tap (it's a swipe
+    // or drag) — that's the only check we need; long-press isn't a
+    // meaningful gesture on a static image, so we don't time-bound it.
+    let tapStart: { x: number; y: number } | null = null;
+    const TAP_MAX_PX = 10;
 
     const dist = (a: Touch, b: Touch) =>
       Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY);
@@ -279,6 +299,12 @@ export function Viewer({
           panX: panRef.current.x,
           panY: panRef.current.y,
         };
+      } else if (e.touches.length === 1 && zoomRef.current === 1) {
+        // Candidate tap: capture the start point. If the touch ends near
+        // the same spot, treat it as a tap (enter fullscreen). Larger
+        // movement is left to the swipe-nav listener on the root.
+        const t = e.touches[0];
+        tapStart = { x: t.clientX, y: t.clientY };
       } else if (e.touches.length === 2) {
         const a = e.touches[0];
         const b = e.touches[1];
@@ -331,8 +357,8 @@ export function Viewer({
         const t = e.touches[0];
         const newPan = clampPan(
           {
-            x: g.panX + (t.clientX - g.startX),
-            y: g.panY + (t.clientY - g.startY),
+            x: g.panX + (t.clientX - g.startX) * PAN_SENSITIVITY,
+            y: g.panY + (t.clientY - g.startY) * PAN_SENSITIVITY,
           },
           zoomRef.current,
         );
@@ -342,6 +368,23 @@ export function Viewer({
     };
 
     const onEnd = (e: TouchEvent) => {
+      // Resolve a pending tap. A near-stationary touchend at zoom===1
+      // only ENTERS fullscreen; exiting is reserved for double-tap
+      // (onImageDoubleClick) so a stray tap on the image while reading
+      // the form below doesn't drop the user out of fullscreen. Both
+      // transitions flip the same `fullscreen` state, so the className
+      // animation is identical in both directions.
+      const t = e.changedTouches[0];
+      if (
+        tapStart &&
+        t &&
+        zoomRef.current === 1 &&
+        !fullscreenRef.current &&
+        Math.hypot(t.clientX - tapStart.x, t.clientY - tapStart.y) <= TAP_MAX_PX
+      ) {
+        setFullscreen(true);
+      }
+      tapStart = null;
       if (e.touches.length === 0) {
         g = null;
       } else if (e.touches.length === 1 && g?.type === "pinch") {
@@ -505,8 +548,8 @@ export function Viewer({
     setPan(
       clampPan(
         {
-          x: drag.startPanX + (e.clientX - drag.startMouseX),
-          y: drag.startPanY + (e.clientY - drag.startMouseY),
+          x: drag.startPanX + (e.clientX - drag.startMouseX) * PAN_SENSITIVITY,
+          y: drag.startPanY + (e.clientY - drag.startMouseY) * PAN_SENSITIVITY,
         },
         zoom,
       ),
@@ -526,11 +569,12 @@ export function Viewer({
   };
 
   const onImageDoubleClick = (e: React.MouseEvent<HTMLImageElement>) => {
-    if (zoom <= 1) return;
+    if (zoom <= 1 && !fullscreen) return;
     e.preventDefault();
     e.stopPropagation();
     setZoom(1);
     setPan({ x: 0, y: 0 });
+    setFullscreen(false);
   };
 
   const handleRemoved = () => {
@@ -598,7 +642,7 @@ export function Viewer({
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 z-[54] bg-background/40 backdrop-blur-xl backdrop-saturate-150 transition-opacity duration-300 ease-out md:hidden"
-        style={{ opacity: zoom > 1 ? 1 : 0 }}
+        style={{ opacity: zoom > 1 || fullscreen ? 1 : 0 }}
       />
 
       {/* Mobile-only close (X) — pinned to the viewport, sibling of the
@@ -748,7 +792,7 @@ export function Viewer({
                 pointerEvents: "auto",
               }}
               className={`block select-none md:w-auto md:h-auto md:max-h-full md:max-w-full md:rounded-none md:object-contain${
-                zoom > 1
+                zoom > 1 || fullscreen
                   ? " max-md:fixed max-md:inset-0 max-md:z-[55] max-md:w-full max-md:h-full max-md:object-contain max-md:rounded-none max-md:p-0"
                   : " w-full h-full object-contain rounded-xl max-md:p-1"
               }`}

@@ -127,8 +127,15 @@ export function DetailEditor({
       toast.error("Could not get download URL");
       return;
     }
+    // Open the signed R2 URL in a new tab so the current details page
+    // stays put. The browser-native `download` attribute is ignored on
+    // cross-origin URLs, which (without target=_blank) causes mobile
+    // Safari to navigate the current tab to the image and lose the
+    // viewer state.
     const a = document.createElement("a");
     a.href = url;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
     a.download = "";
     document.body.appendChild(a);
     a.click();
