@@ -1,21 +1,17 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/db/client";
 import { uploadImage, deleteAllForHash } from "@/modules/storage";
 import { addImageToFolder } from "@/modules/folders";
 import { assignTag } from "@/modules/tags";
+import { revalidateAllViews } from "@/lib/revalidate";
 
 export type IngestResult =
   | { status: "ok"; imageId: string }
   | { status: "duplicate"; existingId: string }
   | { status: "error"; message: string };
-
-async function revalidateAllViews() {
-  revalidatePath("/", "layout");
-}
 
 export async function ingestFile(formData: FormData): Promise<IngestResult> {
   const file = formData.get("file");
@@ -89,6 +85,6 @@ export async function ingestFile(formData: FormData): Promise<IngestResult> {
     });
   }
 
-  await revalidateAllViews();
+  revalidateAllViews();
   return { status: "ok", imageId: id };
 }

@@ -101,7 +101,7 @@ export function EntityActionsMenu({
             </Button>
           }
         />
-        <DropdownMenuContent align="start" className="min-w-fit">
+        <DropdownMenuContent align="end" className="min-w-fit">
           {visibleExtras.map((item) => (
             <DropdownMenuItem key={item.label} onClick={item.onSelect}>
               <item.icon />

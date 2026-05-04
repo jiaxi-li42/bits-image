@@ -1,13 +1,9 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { db, schema } from "@/db/client";
 import { deleteAllForHash } from "@/modules/storage";
-
-function revalidateAllViews() {
-  revalidatePath("/", "layout");
-}
+import { revalidateAllViews } from "@/lib/revalidate";
 
 export async function softDeleteImages(
   imageIds: string[],

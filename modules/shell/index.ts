@@ -1,7 +1,8 @@
 export { AppShell } from "./app-shell";
 export { NAV_ITEMS } from "./nav-items";
 export type { NavItem } from "./nav-items";
-export { getViewCounts } from "./counts";
+// `getViewCounts` is server-only — import from "./counts" directly.
+// The type alias is safe to re-export.
 export type { ViewCounts } from "./counts";
 export { ViewHeader, EmptyState } from "./view-header";
 export { CreateEntityDialog } from "./create-entity-dialog";

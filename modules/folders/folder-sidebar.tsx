@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronDown, ChevronRight, Folder as FolderIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -149,7 +148,7 @@ export function FolderSidebar({
                       className={cn("min-w-0 flex-1 pr-7", SIDEBAR_LINK_DENSE)}
                     >
                       <FolderIcon />
-                      <span className="flex-1 truncate">{f.name}</span>
+                      <span className="min-w-0 flex-1 truncate">{f.name}</span>
                     </SidebarMenuLink>
                   }
                 />

@@ -15,14 +15,6 @@ export async function getSignedImageUrl(
   );
 }
 
-export async function getThumbUrl(
-  hash: string,
-  size: ThumbSize,
-  expiresInSeconds = 3600,
-): Promise<string> {
-  return getSignedImageUrl(`thumbs/${size}/${hash}.webp`, expiresInSeconds);
-}
-
 export async function getOriginalUrl(
   hash: string,
   expiresInSeconds = 3600,

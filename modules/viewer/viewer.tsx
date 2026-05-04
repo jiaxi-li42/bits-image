@@ -1,23 +1,54 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Minus, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  type CarouselApi,
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+} from "@/components/ui/carousel";
 import type { GridImage, ViewKind } from "@/modules/views";
 import { DetailEditor } from "@/modules/details";
 
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 6;
 const ZOOM_STEP = 1.4;
-// Horizontal travel that commits a swipe-to-navigate, in CSS pixels.
-const SWIPE_THRESHOLD = 50;
-// Animation duration for the swipe commit / cancel slide.
-const SWIPE_ANIM_MS = 180;
 // Multiplier on finger / mouse delta when panning a zoomed-in image. >1
 // means a smaller gesture covers more of the (scaled) image — feels
 // snappier on small screens where reach is limited.
 const PAN_SENSITIVITY = 1.5;
+// Maximum movement (CSS px) for a touchend to still be classified as a tap.
+const TAP_MAX_PX = 10;
+
+// In-progress touch gesture state. Stored in a ref so values survive when
+// the listener-binding effect re-runs (e.g. when the mobile overlay mounts
+// mid-pinch as zoom crosses 1).
+type Pinch = {
+  type: "pinch";
+  dist0: number;
+  midX0: number;
+  midY0: number;
+  panX: number;
+  panY: number;
+  zoom0: number;
+};
+type SingleZoomed = {
+  type: "single-zoomed";
+  startX: number;
+  startY: number;
+  panX: number;
+  panY: number;
+};
+
+const touchDist = (a: Touch, b: Touch) =>
+  Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY);
+const touchMid = (a: Touch, b: Touch) => ({
+  x: (a.clientX + b.clientX) / 2,
+  y: (a.clientY + b.clientY) / 2,
+});
 
 export type ViewerProps = {
   images: GridImage[];
@@ -27,6 +58,13 @@ export type ViewerProps = {
   onRemoved: (id: string) => void;
 };
 
+/**
+ * Image viewer built on Embla (shadcn Carousel) for horizontal swipe
+ * navigation. Pinch / pan / wheel zoom and tap-fullscreen are layered on top
+ * of the active slide; when zoom > 1 (or fullscreen on mobile), the active
+ * image is rendered into a sibling overlay so its `transform: scale()` and
+ * `position: fixed` aren't trapped by Embla's translate3d on the slide track.
+ */
 export function Viewer({
   images,
   startIndex,
@@ -34,6 +72,7 @@ export function Viewer({
   view,
   onRemoved,
 }: ViewerProps) {
+  const [api, setApi] = useState<CarouselApi | null>(null);
   const [index, setIndex] = useState(startIndex);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -43,33 +82,26 @@ export function Viewer({
   // double-tap still operate on `zoom`; both states are cleared together
   // when the user taps out.
   const [fullscreen, setFullscreen] = useState(false);
-  // Live horizontal offset during a swipe-to-navigate gesture (mobile).
-  const [swipeDx, setSwipeDx] = useState(0);
-  // Tracks whether a swipe-related transform should animate (CSS transition
-  // on or off). Off during finger-drag (instant follow), on during the
-  // commit/cancel snap.
-  const [swipeAnimating, setSwipeAnimating] = useState(false);
 
-  // Mirror the latest zoom/pan in refs so the wheel/touch handlers can read
-  // fresh values across rapid events without depending on React's batching.
+  // Mirror live values in refs so wheel/touch handlers can read fresh
+  // values across rapid events without depending on React batching.
+  // Synchronous gesture-handler updates also write through these refs,
+  // so reads inside handlers see the latest values without waiting for
+  // a re-render to commit.
   const zoomRef = useRef(zoom);
   const panRef = useRef(pan);
   const fullscreenRef = useRef(fullscreen);
   useEffect(() => {
     zoomRef.current = zoom;
-  }, [zoom]);
-  useEffect(() => {
     panRef.current = pan;
-  }, [pan]);
-  useEffect(() => {
     fullscreenRef.current = fullscreen;
-  }, [fullscreen]);
+  }, [zoom, pan, fullscreen]);
 
   const total = images.length;
+  const safeIndex = Math.min(index, Math.max(0, total - 1));
+  const current = images[safeIndex];
 
-  // Clamp index when the underlying array shrinks (e.g. an image is moved to
-  // trash from the side panel). Without this, prev/next buttons can be left
-  // pointing at a stale index whose `current` is undefined.
+  // Clamp index when the underlying array shrinks (image moved to trash, etc).
   useEffect(() => {
     if (total === 0) {
       onClose("");
@@ -80,49 +112,38 @@ export function Viewer({
     }
   }, [total, index, onClose]);
 
-  const safeIndex = Math.min(index, Math.max(0, total - 1));
-  const current = images[safeIndex];
-
   const closeWithCurrent = useCallback(() => {
     if (current) onClose(current.id);
     else onClose("");
   }, [current, onClose]);
 
-  // Reset zoom + pan + fullscreen when image changes.
+  // Reset zoom/pan/fullscreen whenever the active image changes.
   useEffect(() => {
     setZoom(1);
     setPan({ x: 0, y: 0 });
     setFullscreen(false);
   }, [safeIndex]);
 
-  // Warm the browser's image cache for the neighbours on desktop so
-  // arrow-nav shows their bytes instantly. Mobile already renders the
-  // prev/next <img>s as off-screen swipe slots, so the bytes are
-  // requested anyway — skip the redundant <link rel="preload"> there.
+  // Wire Embla -> React index sync, and jump to the requested startIndex
+  // without animation when the carousel first mounts.
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const mq = window.matchMedia("(min-width: 768px)");
-    if (!mq.matches) return;
-    const neighbours = [
-      safeIndex > 0 ? images[safeIndex - 1] : null,
-      safeIndex < total - 1 ? images[safeIndex + 1] : null,
-    ];
-    const links: HTMLLinkElement[] = [];
-    for (const img of neighbours) {
-      if (!img) continue;
-      const link = document.createElement("link");
-      link.rel = "preload";
-      link.as = "image";
-      link.href = `/api/img/detail/${img.hash}`;
-      document.head.appendChild(link);
-      links.push(link);
-    }
+    if (!api) return;
+    api.scrollTo(startIndex, true);
+    const onSelect = () => setIndex(api.selectedScrollSnap());
+    api.on("select", onSelect);
     return () => {
-      for (const link of links) link.remove();
+      api.off("select", onSelect);
     };
-  }, [safeIndex, total, images]);
+    // startIndex is captured at mount; subsequent changes shouldn't re-jump.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [api]);
 
-  // Lock background scroll while the viewer is open.
+  // Re-init Embla when images change so it picks up new snap points.
+  useEffect(() => {
+    api?.reInit();
+  }, [api, total]);
+
+  // Lock body scroll while the viewer is open.
   useEffect(() => {
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -131,14 +152,25 @@ export function Viewer({
     };
   }, []);
 
-  const stageRef = useRef<HTMLDivElement | null>(null);
-  const rootRef = useRef<HTMLDivElement | null>(null);
+  // The in-flow stage is the active slide's image area inside the carousel
+  // (always present for the active slide). The overlay is the mobile-only
+  // sibling that mounts when zoom > 1 to escape Embla's transformed track.
+  // Both can host gesture listeners; clampPan picks whichever is currently
+  // the visible stage so its dimensions bound the pan correctly.
+  const inflowStageRef = useRef<HTMLDivElement | null>(null);
+  const overlayRef = useRef<HTMLDivElement | null>(null);
 
-  // Compute the max pan that still keeps the (scaled) image overlapping the
-  // stage on both axes. Past this, you'd be staring at empty backdrop.
   const clampPan = useCallback(
     (raw: { x: number; y: number }, atZoom: number) => {
-      const stage = stageRef.current;
+      // Pick the visible stage. The overlay is always mounted when zoom > 1
+      // but is `md:hidden` (display:none, clientWidth = 0) on desktop —
+      // selecting it then would clamp pan to {0,0}. Fall back to the
+      // in-flow stage whenever the overlay is hidden / has zero size.
+      const overlayEl = overlayRef.current;
+      const stage =
+        overlayEl && overlayEl.clientWidth > 0
+          ? overlayEl
+          : inflowStageRef.current;
       const img = stage?.querySelector("img");
       if (!stage || !img) return raw;
       const sw = stage.clientWidth;
@@ -166,12 +198,12 @@ export function Viewer({
   }, [zoom, clampPan]);
 
   const goPrev = useCallback(() => {
-    setIndex((i) => (i > 0 ? i - 1 : i));
-  }, []);
+    api?.scrollPrev();
+  }, [api]);
 
   const goNext = useCallback(() => {
-    setIndex((i) => (i < total - 1 ? i + 1 : i));
-  }, [total]);
+    api?.scrollNext();
+  }, [api]);
 
   const zoomIn = useCallback(() => {
     setZoom((z) => Math.min(MAX_ZOOM, +(z * ZOOM_STEP).toFixed(2)));
@@ -210,16 +242,12 @@ export function Viewer({
     return () => window.removeEventListener("keydown", onKey);
   }, [goPrev, goNext, closeWithCurrent, zoomIn, zoomOut]);
 
-  // Lock body scroll while open.
-  useEffect(() => {
-    document.body.classList.add("viewer-open");
-    return () => document.body.classList.remove("viewer-open");
-  }, []);
-
   // Wheel adjusts zoom; up = in, down = out. Non-passive listener so we can
-  // preventDefault — React's JSX onWheel is passive in React 17+.
+  // preventDefault — React's JSX onWheel is passive in React 17+. Wheel is
+  // a desktop concern, so we always target the in-flow stage (no overlay
+  // on desktop).
   useEffect(() => {
-    const el = stageRef.current;
+    const el = inflowStageRef.current;
     if (!el) return;
     const handler = (e: WheelEvent) => {
       if (e.deltaY === 0) return;
@@ -248,51 +276,32 @@ export function Viewer({
     };
     el.addEventListener("wheel", handler, { passive: false });
     return () => el.removeEventListener("wheel", handler);
-  }, [clampPan]);
+  }, [clampPan, safeIndex]);
 
   // Multi-touch gestures (pinch / two-finger pan / single-finger pan when
-  // zoomed). Only attached to the image stage — single-finger swipe-to-nav
-  // is handled by a separate listener on the root so it works from the form
-  // area too (see below).
+  // zoomed) + tap-to-fullscreen. Single-finger horizontal swipe at zoom=1
+  // is left to Embla. Attached to both the in-flow stage and (when
+  // mounted) the mobile overlay — touches outside the in-flow stage's
+  // bounding box (e.g. while panning a 4× zoomed image) are caught by
+  // the overlay listener.
+  //
+  // Gesture state lives in refs so the values survive listener re-binds.
+  // When the overlay mounts mid-pinch (zoom crosses 1), this effect
+  // re-runs; the closures it builds need to read the same gesture state
+  // so the in-progress pinch keeps its starting baseline.
+  const gestureRef = useRef<Pinch | SingleZoomed | null>(null);
+  const tapStartRef = useRef<{ x: number; y: number } | null>(null);
+
   useEffect(() => {
-    const el = stageRef.current;
-    if (!el) return;
-
-    type Pinch = {
-      type: "pinch";
-      dist0: number;
-      midX0: number;
-      midY0: number;
-      panX: number;
-      panY: number;
-      zoom0: number;
-    };
-    type SingleZoomed = {
-      type: "single-zoomed";
-      startX: number;
-      startY: number;
-      panX: number;
-      panY: number;
-    };
-    let g: Pinch | SingleZoomed | null = null;
-    // Tap-to-enter-fullscreen tracking (mobile, zoom===1 only). Movement
-    // beyond TAP_MAX_PX disqualifies the gesture as a tap (it's a swipe
-    // or drag) — that's the only check we need; long-press isn't a
-    // meaningful gesture on a static image, so we don't time-bound it.
-    let tapStart: { x: number; y: number } | null = null;
-    const TAP_MAX_PX = 10;
-
-    const dist = (a: Touch, b: Touch) =>
-      Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY);
-    const mid = (a: Touch, b: Touch) => ({
-      x: (a.clientX + b.clientX) / 2,
-      y: (a.clientY + b.clientY) / 2,
-    });
+    const els: HTMLElement[] = [];
+    if (inflowStageRef.current) els.push(inflowStageRef.current);
+    if (overlayRef.current) els.push(overlayRef.current);
+    if (els.length === 0) return;
 
     const onStart = (e: TouchEvent) => {
       if (e.touches.length === 1 && zoomRef.current > 1) {
         const t = e.touches[0];
-        g = {
+        gestureRef.current = {
           type: "single-zoomed",
           startX: t.clientX,
           startY: t.clientY,
@@ -300,43 +309,54 @@ export function Viewer({
           panY: panRef.current.y,
         };
       } else if (e.touches.length === 1 && zoomRef.current === 1) {
-        // Candidate tap: capture the start point. If the touch ends near
-        // the same spot, treat it as a tap (enter fullscreen). Larger
-        // movement is left to the swipe-nav listener on the root.
         const t = e.touches[0];
-        tapStart = { x: t.clientX, y: t.clientY };
+        tapStartRef.current = { x: t.clientX, y: t.clientY };
       } else if (e.touches.length === 2) {
         const a = e.touches[0];
         const b = e.touches[1];
-        const m = mid(a, b);
-        g = {
+        const m = touchMid(a, b);
+        gestureRef.current = {
           type: "pinch",
-          dist0: dist(a, b),
+          dist0: touchDist(a, b),
           midX0: m.x,
           midY0: m.y,
           panX: panRef.current.x,
           panY: panRef.current.y,
           zoom0: zoomRef.current,
         };
+        // A 2-finger gesture is never a tap. Clear the pending tap so
+        // that pinch-zoom-out → release at zoom=1 doesn't accidentally
+        // resolve as a tap-to-fullscreen.
+        tapStartRef.current = null;
       } else {
-        g = null;
+        gestureRef.current = null;
       }
     };
 
     const onMove = (e: TouchEvent) => {
+      const g = gestureRef.current;
       if (!g) return;
+      // The element used as the centre-of-stage anchor for pinch math
+      // is the currently *visible* stage. Overlay is mounted whenever
+      // zoom > 1 but display:none on desktop — fall back to in-flow.
+      const overlayEl = overlayRef.current;
+      const visibleEl =
+        overlayEl && overlayEl.clientWidth > 0
+          ? overlayEl
+          : (inflowStageRef.current as HTMLElement);
       if (e.touches.length === 2 && g.type === "pinch") {
         e.preventDefault();
+        e.stopPropagation();
         const a = e.touches[0];
         const b = e.touches[1];
-        const m = mid(a, b);
-        const ratio = dist(a, b) / g.dist0;
+        const m = touchMid(a, b);
+        const ratio = touchDist(a, b) / g.dist0;
         const z1 = Math.max(
           MIN_ZOOM,
           Math.min(MAX_ZOOM, +(g.zoom0 * ratio).toFixed(3)),
         );
         const r = z1 / g.zoom0;
-        const rect = el.getBoundingClientRect();
+        const rect = visibleEl.getBoundingClientRect();
         const offsetX = g.midX0 - (rect.left + rect.width / 2);
         const offsetY = g.midY0 - (rect.top + rect.height / 2);
         const moveX = m.x - g.midX0;
@@ -354,6 +374,7 @@ export function Viewer({
         setPan(newPan);
       } else if (e.touches.length === 1 && g.type === "single-zoomed") {
         e.preventDefault();
+        e.stopPropagation();
         const t = e.touches[0];
         const newPan = clampPan(
           {
@@ -369,11 +390,10 @@ export function Viewer({
 
     const onEnd = (e: TouchEvent) => {
       // Resolve a pending tap. A near-stationary touchend at zoom===1
-      // only ENTERS fullscreen; exiting is reserved for double-tap
-      // (onImageDoubleClick) so a stray tap on the image while reading
-      // the form below doesn't drop the user out of fullscreen. Both
-      // transitions flip the same `fullscreen` state, so the className
-      // animation is identical in both directions.
+      // only ENTERS fullscreen; exiting is reserved for double-tap so a
+      // stray tap on the image while reading the form below doesn't drop
+      // the user out of fullscreen.
+      const tapStart = tapStartRef.current;
       const t = e.changedTouches[0];
       if (
         tapStart &&
@@ -384,219 +404,155 @@ export function Viewer({
       ) {
         setFullscreen(true);
       }
-      tapStart = null;
+      tapStartRef.current = null;
       if (e.touches.length === 0) {
-        g = null;
-      } else if (e.touches.length === 1 && g?.type === "pinch") {
+        gestureRef.current = null;
+      } else if (
+        e.touches.length === 1 &&
+        gestureRef.current?.type === "pinch"
+      ) {
         const t = e.touches[0];
-        g = zoomRef.current > 1
-          ? {
-              type: "single-zoomed",
-              startX: t.clientX,
-              startY: t.clientY,
-              panX: panRef.current.x,
-              panY: panRef.current.y,
-            }
-          : null;
+        gestureRef.current =
+          zoomRef.current > 1
+            ? {
+                type: "single-zoomed",
+                startX: t.clientX,
+                startY: t.clientY,
+                panX: panRef.current.x,
+                panY: panRef.current.y,
+              }
+            : null;
       }
     };
 
-    el.addEventListener("touchstart", onStart, { passive: false });
-    el.addEventListener("touchmove", onMove, { passive: false });
-    el.addEventListener("touchend", onEnd);
-    el.addEventListener("touchcancel", onEnd);
-    return () => {
-      el.removeEventListener("touchstart", onStart);
-      el.removeEventListener("touchmove", onMove);
-      el.removeEventListener("touchend", onEnd);
-      el.removeEventListener("touchcancel", onEnd);
-    };
-  }, [clampPan]);
-
-  // Single-finger swipe-to-navigate. Attached to the root so swipes on the
-  // form scroll area below the image trigger navigation too. Only active
-  // when zoom === 1 (otherwise single-finger drag on the image pans).
-  useEffect(() => {
-    const root = rootRef.current;
-    if (!root) return;
-
-    let startX = 0;
-    let startY = 0;
-    let captured = false; // becomes true once we know the swipe is horizontal
-    let abandoned = false; // becomes true if vertical scroll wins
-
-    const onStart = (e: TouchEvent) => {
-      if (e.touches.length !== 1) return;
-      if (zoomRef.current !== 1) return;
-      // Skip if a pinch/zoomed-pan gesture is starting on the image stage.
-      const t = e.touches[0];
-      startX = t.clientX;
-      startY = t.clientY;
-      captured = false;
-      abandoned = false;
-    };
-
-    const onMove = (e: TouchEvent) => {
-      if (e.touches.length !== 1) return;
-      if (zoomRef.current !== 1) return;
-      if (abandoned) return;
-      const t = e.touches[0];
-      const dx = t.clientX - startX;
-      const dy = t.clientY - startY;
-      if (!captured) {
-        if (Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy)) {
-          captured = true;
-        } else if (Math.abs(dy) > 10) {
-          abandoned = true; // user is scrolling vertically; let the page scroll
-          return;
-        } else {
-          return;
-        }
-      }
-      // Horizontal swipe in progress — track for live drag visual.
-      setSwipeAnimating(false);
-      setSwipeDx(dx);
-    };
-
-    const onEnd = (e: TouchEvent) => {
-      if (!captured || abandoned) {
-        captured = false;
-        abandoned = false;
-        return;
-      }
-      const t = e.changedTouches[0];
-      const dx = t.clientX - startX;
-      const dy = t.clientY - startY;
-      const horizontal = Math.abs(dx) > Math.abs(dy);
-      const passed = Math.abs(dx) > SWIPE_THRESHOLD;
-      const nextAvailable = dx < 0 && safeIndex < total - 1;
-      const prevAvailable = dx > 0 && safeIndex > 0;
-      const commit = horizontal && passed && (nextAvailable || prevAvailable);
-
-      setSwipeAnimating(true);
-      if (commit) {
-        // Slide the image fully off-screen in the swipe direction, then
-        // change the index. The new image renders at swipeDx=0 (we reset
-        // after the index change) so it appears centered.
-        const offscreen =
-          (root.clientWidth || window.innerWidth) * (dx < 0 ? -1 : 1);
-        setSwipeDx(offscreen);
-        window.setTimeout(() => {
-          if (dx < 0) goNext();
-          else goPrev();
-          setSwipeAnimating(false);
-          setSwipeDx(0);
-        }, SWIPE_ANIM_MS);
-      } else {
-        // Spring back to centre.
-        setSwipeDx(0);
-        window.setTimeout(
-          () => setSwipeAnimating(false),
-          SWIPE_ANIM_MS,
-        );
-      }
-      captured = false;
-      abandoned = false;
-    };
-
-    // Passive: false for touchmove so future preventDefault calls work if
-    // needed. (We don't currently call it — `touch-action: pan-y` already
-    // tells the browser to allow only vertical scroll, so horizontal moves
-    // come to us with no need to fight the browser.)
-    root.addEventListener("touchstart", onStart, { passive: true });
-    root.addEventListener("touchmove", onMove, { passive: true });
-    root.addEventListener("touchend", onEnd);
-    root.addEventListener("touchcancel", onEnd);
-    return () => {
-      root.removeEventListener("touchstart", onStart);
-      root.removeEventListener("touchmove", onMove);
-      root.removeEventListener("touchend", onEnd);
-      root.removeEventListener("touchcancel", onEnd);
-    };
-  }, [goPrev, goNext, safeIndex, total]);
-
-  // Pan: drag the image when zoomed > 1. Mouse only — touch is handled
-  // above (browsers emit pointer events for touches too).
-  const dragRef = useRef<{
-    startMouseX: number;
-    startMouseY: number;
-    startPanX: number;
-    startPanY: number;
-    pointerId: number;
-  } | null>(null);
-
-  const onImagePointerDown = (e: React.PointerEvent<HTMLImageElement>) => {
-    if (e.pointerType === "touch") return;
-    if (e.button !== 0) return;
-    if (zoom <= 1) return;
-    e.preventDefault();
-    e.stopPropagation();
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    dragRef.current = {
-      startMouseX: e.clientX,
-      startMouseY: e.clientY,
-      startPanX: pan.x,
-      startPanY: pan.y,
-      pointerId: e.pointerId,
-    };
-    setIsDragging(true);
-  };
-
-  const onImagePointerMove = (e: React.PointerEvent<HTMLImageElement>) => {
-    const drag = dragRef.current;
-    if (!drag || drag.pointerId !== e.pointerId) return;
-    setPan(
-      clampPan(
-        {
-          x: drag.startPanX + (e.clientX - drag.startMouseX) * PAN_SENSITIVITY,
-          y: drag.startPanY + (e.clientY - drag.startMouseY) * PAN_SENSITIVITY,
-        },
-        zoom,
-      ),
-    );
-  };
-
-  const onImagePointerEnd = (e: React.PointerEvent<HTMLImageElement>) => {
-    const drag = dragRef.current;
-    if (!drag || drag.pointerId !== e.pointerId) return;
-    try {
-      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-    } catch {
-      /* ignore */
+    for (const el of els) {
+      el.addEventListener("touchstart", onStart, { passive: false });
+      el.addEventListener("touchmove", onMove, { passive: false });
+      el.addEventListener("touchend", onEnd);
+      el.addEventListener("touchcancel", onEnd);
     }
-    dragRef.current = null;
-    setIsDragging(false);
-  };
+    return () => {
+      for (const el of els) {
+        el.removeEventListener("touchstart", onStart);
+        el.removeEventListener("touchmove", onMove);
+        el.removeEventListener("touchend", onEnd);
+        el.removeEventListener("touchcancel", onEnd);
+      }
+    };
+    // Re-attach when the overlay mounts/unmounts (zoom > 1 toggle) so
+    // the new element gets its listeners.
+  }, [clampPan, safeIndex, zoom > 1]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const onImageDoubleClick = (e: React.MouseEvent<HTMLImageElement>) => {
-    if (zoom <= 1 && !fullscreen) return;
-    e.preventDefault();
-    e.stopPropagation();
-    setZoom(1);
-    setPan({ x: 0, y: 0 });
-    setFullscreen(false);
-  };
+  // Mouse drag (pan when zoomed > 1) and double-click (reset zoom +
+  // exit fullscreen) are bound as native listeners on the in-flow
+  // stage div *and* (when mounted) the mobile overlay. Going through
+  // React's synthetic system on the <img> was unreliable: the image's
+  // visual box overflows its `md:overflow-hidden` parent when zoomed,
+  // and the clipped overflow isn't a reliable hit target. The stage /
+  // overlay containers have well-defined bounds and no clipping, so a
+  // pointerdown / dblclick anywhere over the visible image lands here
+  // first. Document-level pointermove/up listeners take over for the
+  // duration of a drag.
+  useEffect(() => {
+    const els: HTMLElement[] = [];
+    if (inflowStageRef.current) els.push(inflowStageRef.current);
+    if (overlayRef.current) els.push(overlayRef.current);
+    if (els.length === 0) return;
 
-  const handleRemoved = () => {
+    const onDown = (e: PointerEvent) => {
+      if (e.pointerType === "touch") return;
+      if (e.button !== 0) return;
+      if (zoomRef.current <= 1) return;
+      e.stopPropagation();
+      const startMouseX = e.clientX;
+      const startMouseY = e.clientY;
+      const startPan = panRef.current;
+      const onMove = (ev: PointerEvent) => {
+        const newPan = clampPan(
+          {
+            x: startPan.x + (ev.clientX - startMouseX) * PAN_SENSITIVITY,
+            y: startPan.y + (ev.clientY - startMouseY) * PAN_SENSITIVITY,
+          },
+          zoomRef.current,
+        );
+        panRef.current = newPan;
+        setPan(newPan);
+      };
+      const onUp = () => {
+        document.removeEventListener("pointermove", onMove);
+        document.removeEventListener("pointerup", onUp);
+        document.removeEventListener("pointercancel", onUp);
+        setIsDragging(false);
+      };
+      document.addEventListener("pointermove", onMove);
+      document.addEventListener("pointerup", onUp);
+      document.addEventListener("pointercancel", onUp);
+      setIsDragging(true);
+    };
+
+    const onDbl = (e: MouseEvent) => {
+      if (zoomRef.current <= 1 && !fullscreenRef.current) return;
+      e.preventDefault();
+      e.stopPropagation();
+      zoomRef.current = 1;
+      panRef.current = { x: 0, y: 0 };
+      fullscreenRef.current = false;
+      setZoom(1);
+      setPan({ x: 0, y: 0 });
+      setFullscreen(false);
+    };
+
+    for (const el of els) {
+      el.addEventListener("pointerdown", onDown);
+      el.addEventListener("dblclick", onDbl);
+    }
+    return () => {
+      for (const el of els) {
+        el.removeEventListener("pointerdown", onDown);
+        el.removeEventListener("dblclick", onDbl);
+      }
+    };
+    // Re-attach when the overlay mounts/unmounts (zoom > 1 toggle).
+  }, [clampPan, safeIndex, zoom > 1]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleRemoved = useCallback(() => {
     if (!current) return;
-    const id = current.id;
-    onRemoved(id);
+    onRemoved(current.id);
     if (total <= 1) {
       onClose("");
     } else if (safeIndex >= total - 1) {
       setIndex(total - 2);
     }
-  };
+  }, [current, onRemoved, onClose, total, safeIndex]);
+
+  // The active image is rendered via a sibling overlay when zoom > 1, to
+  // escape Embla's translate3d-induced containing block (transform on a
+  // ancestor traps `position: fixed`). Fullscreen at zoom=1 is handled as
+  // a layout change inside the slide (image fills slide, editor hidden) so
+  // Embla's native horizontal swipe still navigates between images.
+  const imageEscaped = zoom > 1;
+
+  // Stable opts reference so Embla doesn't reInit unnecessarily — only
+  // re-create when `imageEscaped` toggles (the value Embla actually cares
+  // about for this viewer). New zoom values inside `imageEscaped=true`
+  // don't churn this object.
+  const carouselOpts = useMemo(
+    () => ({
+      align: "start" as const,
+      containScroll: "trimSnaps" as const,
+      // Embla auto-detects axis; vertical scroll inside slides passes
+      // through to the native scroll container.
+      watchDrag: !imageEscaped,
+      duration: 20,
+    }),
+    [imageEscaped],
+  );
 
   if (!current) return null;
 
-  const prevImage = safeIndex > 0 ? images[safeIndex - 1] : null;
-  const nextImage = safeIndex < total - 1 ? images[safeIndex + 1] : null;
+  const cursor = zoom > 1 ? (isDragging ? "grabbing" : "grab") : "default";
 
-  const cursor =
-    zoom > 1 ? (isDragging ? "grabbing" : "grab") : "default";
-
-  // Stop propagation on toolbar/arrow clicks so an outer listener cannot
+  // Stop propagation on toolbar/arrow clicks so the image's listeners can't
   // accidentally intercept them.
   const stopAnd = (fn: () => void) => (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -604,18 +560,9 @@ export function Viewer({
   };
 
   const imageTransform = `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`;
-  // Always animate border-radius (mobile: rounded-xl → 0 when entering
-  // fullscreen). Transform stays instant during a drag, soft otherwise.
   const imageTransition = isDragging
     ? "border-radius 300ms ease-out"
     : "transform 120ms ease-out, border-radius 300ms ease-out";
-
-  // Swipe transform applies to the whole image-stage + form wrapper so the
-  // form slides along with the image.
-  const swipeTransform = `translateX(${swipeDx}px)`;
-  const swipeTransition = swipeAnimating
-    ? `transform ${SWIPE_ANIM_MS}ms ease-out`
-    : "none";
 
   return (
     <div
@@ -625,28 +572,22 @@ export function Viewer({
       aria-label="Image Viewer"
       data-viewer="true"
     >
-      {/* Backdrop layer. Mobile uses a solid white so the image's gutter
-          (the padding around the rounded photo) reads cleanly; desktop keeps
-          the dim+blur over the page behind. Pulled out of the scroll
-          container so its backdrop-filter doesn't promote that container
-          to a containing block for fixed/absolute descendants. */}
+      {/* Backdrop. Mobile = solid white so the image gutter reads cleanly;
+          desktop = dim+blur over the page behind. */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 bg-background md:bg-background/40 md:backdrop-blur-xl md:backdrop-saturate-150"
       />
 
       {/* Mobile fullscreen-zoom backdrop. Always mounted with opacity 0 so
-          the fade-in transitions when zoom crosses 1. Same blur style as the
-          desktop dim+blur. Sits below the image (z-54 vs image z-55) so the
-          letterbox shows the blurred form behind. */}
+          the fade-in transitions when zoom crosses 1 or fullscreen toggles. */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 z-[54] bg-background/40 backdrop-blur-xl backdrop-saturate-150 transition-opacity duration-300 ease-out md:hidden"
         style={{ opacity: zoom > 1 || fullscreen ? 1 : 0 }}
       />
 
-      {/* Mobile-only close (X) — pinned to the viewport, sibling of the
-          scroll container so it stays put as the user scrolls. */}
+      {/* Mobile-only close (X) — pinned to the viewport. */}
       <Button
         type="button"
         variant="ghost"
@@ -658,208 +599,269 @@ export function Viewer({
         <X className="size-4" />
       </Button>
 
-      <div
-        ref={rootRef}
-        // overflow-x-hidden clips prev/next slots positioned ±100% outside
-        // the page when no swipe is active, and clips the page itself when
-        // the swipe transform pushes content past the viewport edge.
-        className="absolute inset-0 overflow-y-auto overflow-x-hidden md:overflow-hidden"
-        // Browser handles vertical scroll; we own horizontal for swipe-nav.
-        style={{ touchAction: zoom > 1 ? "none" : "pan-y" }}
-      >
-      <div
-        className="md:flex md:h-full md:flex-row max-md:relative"
-        // Swipe-to-navigate translates the entire page (image + form) as a
-        // unit. Transform is only applied during an active swipe so that an
-        // identity transform doesn't create a containing block at rest
-        // (which would trap the zoomed image's `position: fixed`).
-        style={
-          swipeDx !== 0 || swipeAnimating
-            ? { transform: swipeTransform, transition: swipeTransition }
-            : undefined
-        }
-      >
-
-      {/* Prev column — mobile only. Image at top + Skeleton placeholder
-          where the form will land. The real DetailEditor only mounts for
-          `current.id`; once the swipe commits and `current` updates, the
-          new editor's own loading skeleton takes over seamlessly. */}
-      {prevImage ? (
-        <div
-          aria-hidden
-          className="hidden max-md:flex max-md:flex-col max-md:absolute max-md:right-full max-md:top-0 max-md:w-full"
+      {/* Carousel container is `z-[55]` so the in-flow image sits above
+          the mobile fullscreen-zoom backdrop (z-[54]). On desktop both
+          backdrop and z-index are inert (md:hidden / md:flex). */}
+      <div className="absolute inset-0 z-[55] md:flex">
+        <Carousel
+          className="h-full md:flex-1 md:min-w-0"
+          opts={carouselOpts}
+          setApi={setApi}
         >
+          <CarouselContent>
+            {images.map((img, i) => {
+              const isActive = i === safeIndex;
+              return (
+                <CarouselItem
+                  key={img.id}
+                  className="h-full overflow-y-auto md:overflow-hidden"
+                >
+                  <Slide
+                    img={img}
+                    isActive={isActive}
+                    fullscreen={isActive && fullscreen}
+                    view={view}
+                    onRemoved={handleRemoved}
+                    onClose={closeWithCurrent}
+                    // Active image transforms with zoom/pan in place. The
+                    // overlay below only takes over on mobile when zoom>1
+                    // so it can break out of Embla's transformed track.
+                    hideOnMobileWhenEscaped={isActive && imageEscaped}
+                    stageRef={isActive ? inflowStageRef : undefined}
+                    cursor={isActive ? cursor : "default"}
+                    transform={isActive ? imageTransform : undefined}
+                    transition={isActive ? imageTransition : undefined}
+                  />
+                </CarouselItem>
+              );
+            })}
+          </CarouselContent>
+
+          {/* Desktop overlays — anchored to the carousel area (not the
+              full viewport) so they don't drift over the editor aside. */}
+
+          {/* Counter pill */}
+          {total > 1 ? (
+            <div className="pointer-events-none absolute top-3 left-1/2 z-30 hidden -translate-x-1/2 rounded-full bg-foreground/70 px-3 py-1 text-xs text-background shadow md:block">
+              {safeIndex + 1} / {total}
+            </div>
+          ) : null}
+
+          {/* Zoom toolbar (top-right) */}
           <div
-            className="w-full p-1"
-            style={{
-              aspectRatio: `${prevImage.width} / ${prevImage.height}`,
-            }}
+            data-slot="button-group"
+            data-orientation="vertical"
+            className="absolute top-3 right-3 z-30 hidden flex-col overflow-hidden rounded-lg border border-border bg-background shadow-sm md:flex"
           >
-            <img
-              src={`/api/img/detail/${prevImage.hash}`}
-              alt=""
-              className="block h-full w-full select-none rounded-xl object-contain"
-            />
-          </div>
-          <DetailEditorSkeleton />
-        </div>
-      ) : null}
-
-      <div
-        ref={stageRef}
-        className="relative flex w-full md:flex-1 md:min-w-0 items-start md:items-center justify-center md:overflow-hidden"
-      >
-        {/* Counter pill — desktop only */}
-        {total > 1 ? (
-          <div className="pointer-events-none absolute top-3 left-1/2 z-10 hidden -translate-x-1/2 rounded-full bg-foreground/70 px-3 py-1 text-xs text-background shadow md:block">
-            {safeIndex + 1} / {total}
-          </div>
-        ) : null}
-
-        {/* Toolbar (top-right): zoom in / zoom out — desktop only */}
-        <div
-          data-slot="button-group"
-          data-orientation="vertical"
-          className="absolute top-3 right-3 z-20 hidden flex-col overflow-hidden rounded-lg border border-border bg-background shadow-sm md:flex"
-        >
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-9 rounded-none border-0 hover:bg-muted disabled:opacity-30"
-            onClick={stopAnd(zoomIn)}
-            disabled={zoom >= MAX_ZOOM}
-            aria-label="Zoom In"
-          >
-            <Plus className="size-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-9 rounded-none border-0 border-t border-border hover:bg-muted disabled:opacity-30"
-            onClick={stopAnd(zoomOut)}
-            disabled={zoom <= MIN_ZOOM}
-            aria-label="Zoom Out"
-          >
-            <Minus className="size-4" />
-          </Button>
-        </div>
-
-        {/* Prev arrow — desktop only */}
-        {total > 1 ? (
-          <div className="absolute top-1/2 left-3 z-20 -translate-y-1/2 hidden md:block">
             <Button
               variant="ghost"
               size="icon"
-              className="size-10 rounded-full border border-border bg-background text-foreground shadow-sm hover:bg-muted hover:text-foreground disabled:opacity-30"
-              onClick={stopAnd(goPrev)}
-              disabled={safeIndex === 0}
-              aria-label="Previous"
+              className="size-9 rounded-none border-0 hover:bg-muted disabled:opacity-30"
+              onClick={stopAnd(zoomIn)}
+              disabled={zoom >= MAX_ZOOM}
+              aria-label="Zoom In"
             >
-              <ChevronLeft className="size-5" />
+              <Plus className="size-4" />
             </Button>
-          </div>
-        ) : null}
-
-        {/* Image. Wrapper carries an inline `aspect-ratio` matching the
-            current image on mobile so its height is held by CSS regardless
-            of whether the image is in flow, escaped to fullscreen-zoom, or
-            translated by an active swipe. The form below never reflows. */}
-        <div
-          className="pointer-events-none flex w-full p-1 md:h-full items-start md:items-center justify-center md:p-8 max-md:relative max-md:aspect-(--image-ar) max-md:p-0"
-          style={
-            { "--image-ar": `${current.width} / ${current.height}` } as React.CSSProperties
-          }
-        >
-          {/* Layout container for the current image. Prev/next image+editor
-              columns live as siblings of the swipe wrapper (above) so the
-              form slides along with the image during a swipe. */}
-          <div className="md:contents max-md:absolute max-md:inset-0">
-            <img
-              src={`/api/img/detail/${current.hash}`}
-              alt={current.title ?? ""}
-              draggable={false}
-              onPointerDown={onImagePointerDown}
-              onPointerMove={onImagePointerMove}
-              onPointerUp={onImagePointerEnd}
-              onPointerCancel={onImagePointerEnd}
-              onPointerLeave={onImagePointerEnd}
-              onDoubleClick={onImageDoubleClick}
-              style={{
-                transform: imageTransform,
-                transformOrigin: "center center",
-                transition: imageTransition,
-                cursor,
-                pointerEvents: "auto",
-              }}
-              className={`block select-none md:w-auto md:h-auto md:max-h-full md:max-w-full md:rounded-none md:object-contain${
-                zoom > 1 || fullscreen
-                  ? " max-md:fixed max-md:inset-0 max-md:z-[55] max-md:w-full max-md:h-full max-md:object-contain max-md:rounded-none max-md:p-0"
-                  : " w-full h-full object-contain rounded-xl max-md:p-1"
-              }`}
-            />
-
-          </div>
-        </div>
-
-        {/* Next arrow — desktop only */}
-        {total > 1 ? (
-          <div className="absolute top-1/2 right-3 z-20 -translate-y-1/2 hidden md:block">
             <Button
               variant="ghost"
               size="icon"
-              className="size-10 rounded-full border border-border bg-background text-foreground shadow-sm hover:bg-muted hover:text-foreground disabled:opacity-30"
-              onClick={stopAnd(goNext)}
-              disabled={safeIndex >= total - 1}
-              aria-label="Next"
+              className="size-9 rounded-none border-0 border-t border-border hover:bg-muted disabled:opacity-30"
+              onClick={stopAnd(zoomOut)}
+              disabled={zoom <= MIN_ZOOM}
+              aria-label="Zoom Out"
             >
-              <ChevronRight className="size-5" />
+              <Minus className="size-4" />
             </Button>
           </div>
-        ) : null}
+
+          {/* Prev / Next arrows */}
+          {total > 1 ? (
+            <>
+              <div className="absolute top-1/2 left-3 z-30 hidden -translate-y-1/2 md:block">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-10 rounded-full border border-border bg-background text-foreground shadow-sm hover:bg-muted hover:text-foreground disabled:opacity-30"
+                  onClick={stopAnd(goPrev)}
+                  disabled={safeIndex === 0}
+                  aria-label="Previous"
+                >
+                  <ChevronLeft className="size-5" />
+                </Button>
+              </div>
+              <div className="absolute top-1/2 right-3 z-30 hidden -translate-y-1/2 md:block">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-10 rounded-full border border-border bg-background text-foreground shadow-sm hover:bg-muted hover:text-foreground disabled:opacity-30"
+                  onClick={stopAnd(goNext)}
+                  disabled={safeIndex >= total - 1}
+                  aria-label="Next"
+                >
+                  <ChevronRight className="size-5" />
+                </Button>
+              </div>
+            </>
+          ) : null}
+        </Carousel>
+
+        {/* Desktop side editor. Stays outside the carousel so it doesn't
+            re-mount on swipe; keyed by current.id so it remounts on slide
+            change with the right form state. */}
+        <aside className="hidden bg-background/95 backdrop-blur-md md:flex md:w-96 md:flex-none md:flex-col md:border-l md:border-border/50">
+          <DetailEditor
+            key={current.id}
+            imageId={current.id}
+            view={view}
+            onRemoved={handleRemoved}
+            onClose={closeWithCurrent}
+          />
+        </aside>
       </div>
 
-      {/* Editor panel — flows below the image on mobile (single page scroll);
-          fixed-height side panel with internal scroll on desktop. */}
-      <aside className="bg-background/95 backdrop-blur-md md:flex md:w-96 md:flex-none md:flex-col md:border-l md:border-border/50">
-        <DetailEditor
-          key={current.id}
-          imageId={current.id}
-          view={view}
-          onRemoved={handleRemoved}
-          onClose={closeWithCurrent}
-        />
-      </aside>
-
-      {/* Next column — mobile only. Mirror of the prev column above. */}
-      {nextImage ? (
+      {/* Escape hatch for the active image when zoom > 1 on mobile.
+          Sibling of the carousel so its own transform isn't trapped by
+          Embla's translate3d on the slide track. Hidden on desktop —
+          desktop applies the transform to the in-flow image directly. */}
+      {imageEscaped ? (
         <div
-          aria-hidden
-          className="hidden max-md:flex max-md:flex-col max-md:absolute max-md:left-full max-md:top-0 max-md:w-full"
+          ref={overlayRef}
+          className="pointer-events-auto absolute inset-0 z-[55] flex items-center justify-center md:hidden"
         >
-          <div
-            className="w-full p-1"
+          <img
+            src={`/api/img/detail/${current.hash}`}
+            alt={current.title ?? ""}
+            draggable={false}
+            decoding="async"
             style={{
-              aspectRatio: `${nextImage.width} / ${nextImage.height}`,
+              transform: imageTransform,
+              transformOrigin: "center center",
+              transition: imageTransition,
+              cursor,
             }}
-          >
-            <img
-              src={`/api/img/detail/${nextImage.hash}`}
-              alt=""
-              className="block h-full w-full select-none rounded-xl object-contain"
-            />
-          </div>
-          <DetailEditorSkeleton />
+            className="block h-full w-full select-none object-contain"
+          />
         </div>
       ) : null}
-      </div>
-      </div>
     </div>
   );
 }
 
+type SlideProps = {
+  img: GridImage;
+  isActive: boolean;
+  /** Mobile-only: image fills the slide and the editor area is hidden. */
+  fullscreen: boolean;
+  view: ViewKind;
+  onRemoved: () => void;
+  onClose: () => void;
+  /** Hide the in-flow image on mobile only (the overlay copy is showing). */
+  hideOnMobileWhenEscaped: boolean;
+  stageRef?: React.Ref<HTMLDivElement>;
+  cursor: string;
+  transform?: string;
+  transition?: string;
+};
+
+const Slide = memo(function Slide({
+  img,
+  isActive,
+  fullscreen,
+  view,
+  onRemoved,
+  onClose,
+  hideOnMobileWhenEscaped,
+  stageRef,
+  cursor,
+  transform,
+  transition,
+}: SlideProps) {
+  return (
+    // In fullscreen mode the slide wrapper, stage div, and inner image
+    // wrapper all need explicit h-full on mobile so the % chain resolves
+    // (otherwise `h-full` on the image wrapper inherits `0` and the
+    // image collapses to zero height).
+    <div
+      className={`md:flex md:h-full md:flex-row${
+        fullscreen ? " max-md:h-full" : ""
+      }`}
+    >
+      {/* Image stage. On mobile it sits at top of the vertically-scrolling
+          slide column; on desktop it fills the slide. In mobile fullscreen
+          mode, the stage expands to the full slide height (no aspect-ratio
+          slot) and the editor below is hidden. */}
+      <div
+        ref={stageRef}
+        className={`relative flex w-full md:flex-1 md:min-w-0 items-start md:items-center justify-center md:overflow-hidden${
+          fullscreen ? " max-md:h-full" : ""
+        }`}
+      >
+        <div
+          // `aspect-(--image-ar)` on mobile keeps the slot height stable
+          // regardless of the image's load state or transform. In fullscreen
+          // we drop the aspect-ratio so the image fills the full slide.
+          className={`pointer-events-none flex w-full md:h-full items-start md:items-center justify-center md:p-8 max-md:relative${
+            fullscreen
+              ? " max-md:h-full max-md:p-0"
+              : " p-1 max-md:aspect-(--image-ar) max-md:p-0"
+          }`}
+          style={
+            { "--image-ar": `${img.width} / ${img.height}` } as React.CSSProperties
+          }
+        >
+          <img
+            src={`/api/img/detail/${img.hash}`}
+            alt={img.title ?? ""}
+            draggable={false}
+            // Browser defers loading detail-size bytes until the slide
+            // is near the viewport. Embla keeps neighbours in the DOM but
+            // off-screen (translated by the slide track), so loading=eager
+            // would fire all N images upfront.
+            loading={isActive ? "eager" : "lazy"}
+            decoding="async"
+            style={{
+              cursor,
+              pointerEvents: "auto",
+              transform,
+              transformOrigin: "center center",
+              transition,
+            }}
+            // Active image transforms freely on desktop (clipped by the
+            // stage's overflow-hidden). On mobile zoom>1 (escaped), hide
+            // the in-flow copy — the overlay sibling renders the scaled
+            // image. Fullscreen drops border-radius and padding.
+            className={`block w-full h-full select-none object-contain md:w-auto md:h-auto md:max-h-full md:max-w-full md:rounded-none md:p-0${
+              fullscreen ? "" : " max-md:p-1 rounded-xl"
+            }${hideOnMobileWhenEscaped ? " max-md:invisible" : ""}`}
+          />
+        </div>
+      </div>
+
+      {/* Mobile editor. Active slide gets the real form; neighbours get a
+          skeleton placeholder so the swipe shows the form area sliding
+          alongside the image. Hidden on desktop (the side <aside> in the
+          parent shows the real one) and in mobile fullscreen mode. */}
+      <div className={fullscreen ? "hidden" : "md:hidden"}>
+        {isActive ? (
+          <DetailEditor
+            key={img.id}
+            imageId={img.id}
+            view={view}
+            onRemoved={onRemoved}
+            onClose={onClose}
+          />
+        ) : (
+          <DetailEditorSkeleton />
+        )}
+      </div>
+    </div>
+  );
+});
+
 // Mirrors the loading state inside DetailEditor itself. Shown in the
-// off-screen prev/next columns during a swipe so the form area slides
-// in alongside the image; once the swipe commits, the real editor
+// inactive slides so the form area slides in alongside the image; once
+// the swipe commits and Embla's `select` event fires, the real editor
 // remounts with its own loading skeleton and replaces this seamlessly.
 function DetailEditorSkeleton() {
   return (

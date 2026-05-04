@@ -1,11 +1,12 @@
 import type { LucideIcon } from "lucide-react";
 import { Images, Inbox, Tags, Trash2 } from "lucide-react";
+import type { ViewKind } from "@/modules/views";
 
 export type NavItem = {
   href: string;
   label: string;
   icon: LucideIcon;
-  view: "library" | "inbox" | "organised" | "trash";
+  view: ViewKind;
 };
 
 export const NAV_ITEMS: NavItem[] = [

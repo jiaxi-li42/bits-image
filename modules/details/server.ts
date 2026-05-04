@@ -1,10 +1,10 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db, schema } from "@/db/client";
 import type { Image } from "@/db/schema";
+import { revalidateViewsOnly } from "@/lib/revalidate";
 
 export type ImageMeta = Pick<
   Image,
@@ -59,6 +59,8 @@ export async function updateImageMeta(
     })
     .where(eq(schema.images.id, id));
 
-  revalidatePath("/", "layout");
+  // Meta change doesn't move images between views or affect counts —
+  // skip the shell-tag bust so the cached sidebar continues serving.
+  revalidateViewsOnly();
   return { status: "ok" };
 }

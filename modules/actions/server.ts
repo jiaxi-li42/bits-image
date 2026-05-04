@@ -1,13 +1,9 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
-import { eq, and, isNotNull, lt } from "drizzle-orm";
+import { eq, inArray, isNotNull } from "drizzle-orm";
 import { db, schema } from "@/db/client";
 import { deleteAllForHash, getOriginalUrl } from "@/modules/storage";
-
-function revalidateAllViews() {
-  revalidatePath("/", "layout");
-}
+import { revalidateAllViews } from "@/lib/revalidate";
 
 export async function emptyTrash(): Promise<{ removed: number }> {
   const rows = await db
@@ -16,12 +12,22 @@ export async function emptyTrash(): Promise<{ removed: number }> {
     .where(isNotNull(schema.images.deletedAt))
     .all();
 
-  for (const r of rows) {
-    await deleteAllForHash(r.hash).catch((err) => {
-      console.warn(`R2 cleanup failed for ${r.hash}:`, err);
-    });
-    await db.delete(schema.images).where(eq(schema.images.id, r.id));
-  }
+  if (rows.length === 0) return { removed: 0 };
+
+  // R2 deletes in parallel; one bulk DB DELETE — mirrors hardDeleteImages.
+  await Promise.all(
+    rows.map((r) =>
+      deleteAllForHash(r.hash).catch((err) => {
+        console.warn(`R2 cleanup failed for ${r.hash}:`, err);
+      }),
+    ),
+  );
+  await db.delete(schema.images).where(
+    inArray(
+      schema.images.id,
+      rows.map((r) => r.id),
+    ),
+  );
 
   revalidateAllViews();
   return { removed: rows.length };
@@ -35,23 +41,4 @@ export async function getDownloadUrl(id: string): Promise<string | null> {
     .get();
   if (!row) return null;
   return getOriginalUrl(row.hash, 300);
-}
-
-export async function purgeExpiredTrash(olderThanMs = 30 * 24 * 60 * 60 * 1000): Promise<{
-  removed: number;
-}> {
-  const cutoff = new Date(Date.now() - olderThanMs);
-  const rows = await db
-    .select({ id: schema.images.id, hash: schema.images.hash })
-    .from(schema.images)
-    .where(and(isNotNull(schema.images.deletedAt), lt(schema.images.deletedAt, cutoff)))
-    .all();
-
-  for (const r of rows) {
-    await deleteAllForHash(r.hash).catch(() => {});
-    await db.delete(schema.images).where(eq(schema.images.id, r.id));
-  }
-
-  if (rows.length > 0) revalidateAllViews();
-  return { removed: rows.length };
 }

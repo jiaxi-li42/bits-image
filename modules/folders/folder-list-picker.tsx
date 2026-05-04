@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Plus } from "lucide-react";
 import {
   Command,
@@ -15,7 +15,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { listFolders, type FolderNode } from "./server";
+import { useShell } from "@/modules/shell/shell-context";
+import type { FolderNode } from "./server";
 
 export type FolderListPickerProps = {
   /**
@@ -51,20 +52,7 @@ export function FolderListPicker({
   searchPlaceholder,
 }: FolderListPickerProps) {
   const [query, setQuery] = useState("");
-  const [folders, setFolders] = useState<FolderNode[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    listFolders().then((all) => {
-      if (cancelled) return;
-      setFolders(all);
-      setLoading(false);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const { folders } = useShell();
 
   const trimmed = query.trim();
   const visible = excludeIds
@@ -85,9 +73,7 @@ export function FolderListPicker({
     <Command shouldFilter={false}>
       <CommandInput
         placeholder={
-          loading
-            ? "Loading…"
-            : searchPlaceholder ?? (onCreate ? "Search or create…" : "Search folders…")
+          searchPlaceholder ?? (onCreate ? "Search or create…" : "Search folders…")
         }
         value={query}
         onValueChange={setQuery}
@@ -100,7 +86,7 @@ export function FolderListPicker({
         }}
       />
       <CommandList>
-        <CommandEmpty>{loading ? "Loading…" : "No folders."}</CommandEmpty>
+        <CommandEmpty>No folders.</CommandEmpty>
         {filtered.length > 0 ? (
           <CommandGroup heading="Folders">
             {filtered.map((f) => {
@@ -116,7 +102,7 @@ export function FolderListPicker({
                         onSelect={() => onPick(f)}
                       >
                         <span
-                          className="flex-1 truncate"
+                          className="min-w-0 flex-1 truncate"
                           style={
                             showTree
                               ? { paddingLeft: `${f.depth * 14}px` }

@@ -143,7 +143,7 @@ export function TagPicker({ imageId }: { imageId: string }) {
                                 isAssigned ? onUnassign(t) : onAssign(t)
                               }
                             >
-                              <span className="flex-1 truncate">{t.name}</span>
+                              <span className="min-w-0 flex-1 truncate">{t.name}</span>
                               <span className="ml-2 text-xs text-muted-foreground">
                                 {t.count}
                               </span>

@@ -113,6 +113,18 @@ export function EditTagsAction({
     }
     setOpen(false);
     if (add.length === 0 && remove.length === 0) return;
+
+    // Keep the in-memory cache in sync with what we just sent to the
+    // server. Without this update, `cachedSigRef.current === idsSig`
+    // still matches on reopen, so the open-effect would `setCurrent
+    // (new Map(initial))` — restoring pre-apply values and showing
+    // wrong checkbox states until the user reselects different images.
+    const nextInitial = new Map(initial);
+    for (const id of add) nextInitial.set(id, "all");
+    for (const id of remove) nextInitial.set(id, "none");
+    setInitial(nextInitial);
+    setCurrent(nextInitial);
+
     const targetIds = ids;
     const targetTotal = total;
     startTransition(async () => {
@@ -182,7 +194,7 @@ export function EditTagsAction({
                         tabIndex={-1}
                         className="pointer-events-none"
                       />
-                      <span className="flex-1 truncate">{t.name}</span>
+                      <span className="min-w-0 flex-1 truncate">{t.name}</span>
                       <span className="text-xs text-muted-foreground">
                         {t.count}
                       </span>

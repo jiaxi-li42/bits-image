@@ -1,13 +1,25 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import { MasonryPhotoAlbum, type Photo } from "react-photo-album";
 import "react-photo-album/masonry.css";
 import { loadMore } from "./actions";
 import { TRASH_RETENTION_MS } from "./types";
 import type { GridImage, TagFilterMode, ViewKind } from "./types";
 import { Viewer } from "@/modules/viewer";
-import { useManage } from "@/modules/manage";
+import {
+  useIsManaging,
+  useIsSelected,
+  useManageActions,
+} from "@/modules/manage";
 import { Checkbox } from "@/components/ui/checkbox";
 
 export type GridProps = {
@@ -58,14 +70,29 @@ export function Grid({
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
-  const manage = useManage();
+  // Granular manage subscriptions: the Grid container only needs to know
+  // mode + actions. Per-photo selection is read inside <PhotoCard> via
+  // `useIsSelected(id)` so a multi-select toggle re-renders only the
+  // toggled card, not the whole grid.
+  const isManaging = useIsManaging();
+  const manageActions = useManageActions();
 
+  // Sync server state into local state ONLY when the server actually
+  // delivered a different page. The previous version diffed by reference,
+  // which fired on every parent re-render — wiping optimistic deletes
+  // the viewer had just applied. Signature is "first-id:length:cursor".
+  const serverSig = `${initialItems[0]?.id ?? ""}:${initialItems.length}:${
+    initialCursor ?? ""
+  }`;
+  const lastSyncedSigRef = useRef(serverSig);
   useEffect(() => {
+    if (lastSyncedSigRef.current === serverSig) return;
+    lastSyncedSigRef.current = serverSig;
     setItems(initialItems);
     setCursor(initialCursor);
-  }, [initialItems, initialCursor]);
+  }, [serverSig, initialItems, initialCursor]);
 
-  const photos = items.map(toPhoto);
+  const photos = useMemo(() => items.map(toPhoto), [items]);
 
   const loadNext = useCallback(() => {
     if (!cursor || pending) return;
@@ -102,7 +129,7 @@ export function Grid({
   // single-select highlight. Skipped while Manage mode is on so bulk
   // selection isn't wiped by clicking sidebar / toolbar / panel.
   useEffect(() => {
-    if (manage.isManaging) return;
+    if (isManaging) return;
     if (!selectedId) return;
     const onDocClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement | null;
@@ -121,7 +148,7 @@ export function Grid({
     };
     document.addEventListener("click", onDocClick);
     return () => document.removeEventListener("click", onDocClick);
-  }, [selectedId, manage.isManaging]);
+  }, [selectedId, isManaging]);
 
   if (items.length === 0) return null;
 
@@ -149,9 +176,7 @@ export function Grid({
 
   return (
     <>
-      <div
-        className={`px-4 py-4 md:px-6 ${manage.isManaging ? "pb-24" : ""}`}
-      >
+      <div className={`px-4 py-4 md:px-6 ${isManaging ? "pb-24" : ""}`}>
         <MasonryPhotoAlbum
           photos={photos}
           columns={(w) => (w < 540 ? 2 : w < 900 ? 3 : w < 1300 ? 4 : 5)}
@@ -159,8 +184,8 @@ export function Grid({
           onClick={({ index }) => {
             const photo = photos[index];
             if (!photo) return;
-            if (manage.isManaging) {
-              manage.toggle(photo.id);
+            if (isManaging) {
+              manageActions.toggle(photo.id);
               return;
             }
             setSelectedId(photo.id);
@@ -169,51 +194,17 @@ export function Grid({
           render={{
             button: ({ onClick, style, className, children }, context) => {
               const photo = context?.photo as GridPhoto | undefined;
-              const isMulti = !!photo && manage.isSelected(photo.id);
-              const isSingle =
-                !manage.isManaging && !!photo && selectedId === photo.id;
-              const isSelected = isMulti || isSingle;
               return (
-                <div
-                  role="button"
-                  tabIndex={0}
-                  style={style}
-                  data-photo-card="true"
-                  data-photo-id={photo?.id}
-                  className={`${className ?? ""} relative cursor-pointer overflow-hidden rounded-md outline-none ring-offset-2 ring-offset-background transition-shadow ${
-                    isSelected
-                      ? "ring-2 ring-primary"
-                      : "focus-visible:ring-2 focus-visible:ring-ring"
-                  }`}
-                  onClick={onClick as unknown as React.MouseEventHandler<HTMLDivElement>}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      onClick?.(
-                        e as unknown as React.MouseEvent<HTMLButtonElement>,
-                      );
-                    }
-                  }}
-                  aria-pressed={isSelected}
+                <PhotoCard
+                  photo={photo}
+                  view={view}
+                  isSingleSelected={!!photo && selectedId === photo.id}
+                  onClick={onClick}
+                  hostStyle={style}
+                  hostClassName={className}
                 >
                   {children}
-                  {view === "trash" && photo?.deletedAt != null ? (
-                    <span className="pointer-events-none absolute top-2 left-2 rounded-md bg-background/80 px-1.5 py-0.5 text-xs font-medium text-foreground shadow-xs">
-                      {(() => {
-                        const d = daysLeft(photo.deletedAt);
-                        return d === 1 ? "1 day left" : `${d} days left`;
-                      })()}
-                    </span>
-                  ) : null}
-                  {manage.isManaging ? (
-                    <Checkbox
-                      checked={isMulti}
-                      tabIndex={-1}
-                      aria-hidden
-                      className="pointer-events-none absolute top-2 right-2 size-5 bg-background/80"
-                    />
-                  ) : null}
-                </div>
+                </PhotoCard>
               );
             },
           }}
@@ -237,5 +228,79 @@ export function Grid({
         />
       ) : null}
     </>
+  );
+}
+
+/**
+ * Per-photo card. Subscribes to its own selection state via
+ * `useIsSelected(id)` so a multi-select toggle on a different photo
+ * does NOT re-render this one. Mode (`useIsManaging`) is also a
+ * granular subscription — it doesn't fire when only the selection
+ * changes.
+ *
+ * `isSingleSelected` is passed as a prop because the single-select
+ * highlight is local to the parent Grid (state set on viewer close);
+ * it's a rare change so re-rendering all visible cards once is fine.
+ */
+function PhotoCard({
+  photo,
+  view,
+  isSingleSelected,
+  onClick,
+  hostStyle,
+  hostClassName,
+  children,
+}: {
+  photo: GridPhoto | undefined;
+  view: ViewKind;
+  isSingleSelected: boolean;
+  onClick?: React.MouseEventHandler<HTMLButtonElement>;
+  hostStyle?: React.CSSProperties;
+  hostClassName?: string;
+  children?: ReactNode;
+}) {
+  const id = photo?.id ?? "";
+  const isMulti = useIsSelected(id);
+  const isManaging = useIsManaging();
+  const isSelected = isMulti || (!isManaging && isSingleSelected);
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      style={hostStyle}
+      data-photo-card="true"
+      data-photo-id={photo?.id}
+      className={`${hostClassName ?? ""} relative cursor-pointer overflow-hidden rounded-md outline-none ring-offset-2 ring-offset-background transition-shadow ${
+        isSelected
+          ? "ring-2 ring-primary"
+          : "focus-visible:ring-2 focus-visible:ring-ring"
+      }`}
+      onClick={onClick as unknown as React.MouseEventHandler<HTMLDivElement>}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick?.(e as unknown as React.MouseEvent<HTMLButtonElement>);
+        }
+      }}
+      aria-pressed={isSelected}
+    >
+      {children}
+      {view === "trash" && photo?.deletedAt != null ? (
+        <span className="pointer-events-none absolute top-2 left-2 rounded-md bg-background/80 px-1.5 py-0.5 text-xs font-medium text-foreground shadow-xs">
+          {(() => {
+            const d = daysLeft(photo.deletedAt);
+            return d === 1 ? "1 day left" : `${d} days left`;
+          })()}
+        </span>
+      ) : null}
+      {isManaging ? (
+        <Checkbox
+          checked={isMulti}
+          tabIndex={-1}
+          aria-hidden
+          className="pointer-events-none absolute top-2 right-2 size-5 bg-background/80"
+        />
+      ) : null}
+    </div>
   );
 }

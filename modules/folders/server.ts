@@ -1,11 +1,12 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { unstable_cache } from "next/cache";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { db, schema } from "@/db/client";
 import type { Folder as DbFolder } from "@/db/schema";
+import { revalidateAllViews, SHELL_CACHE_TAG } from "@/lib/revalidate";
 import { MAX_FOLDER_DEPTH } from "./constants";
 
 // UI-facing slice (omits createdAt — none of the consumers need it).
@@ -18,10 +19,6 @@ export type FolderNode = FolderWithCount & {
 
 const NameSchema = z.string().trim().min(1).max(64);
 
-function revalidateAllViews() {
-  revalidatePath("/", "layout");
-}
-
 export async function getFolderDepth(id: string): Promise<number> {
   return (await ancestorIds(id)).length;
 }
@@ -30,22 +27,26 @@ export type FolderResult =
   | { status: "ok"; folder: Folder }
   | { status: "error"; message: string };
 
-// Walk up the tree following parentId pointers. Bounded by depth limit.
-// Exported so bulk operations (modules/manage/server.ts) can reuse it.
+// Recursive CTE: walk up the parent chain in one query. Replaces an N-roundtrip
+// loop. Exported so bulk operations (modules/manage/server.ts) can reuse it.
+// `MAX_FOLDER_DEPTH + 1` is the cycle-safety bound; legitimate trees are
+// capped well below it.
 export async function ancestorIds(folderId: string): Promise<string[]> {
-  const ids: string[] = [];
-  let current: string | null = folderId;
-  for (let i = 0; i < 32 && current; i++) {
-    const row = await db
-      .select({ parentId: schema.folders.parentId })
-      .from(schema.folders)
-      .where(eq(schema.folders.id, current))
-      .get();
-    if (!row || !row.parentId) break;
-    ids.push(row.parentId);
-    current = row.parentId;
-  }
-  return ids;
+  const limit = MAX_FOLDER_DEPTH + 1;
+  // Returns ancestors ordered nearest-first (immediate parent first), the
+  // shape the previous loop produced.
+  const rows = await db.all<{ id: string; depth: number }>(sql`
+    WITH RECURSIVE chain(id, parent_id, depth) AS (
+      SELECT id, parent_id, 0 FROM ${schema.folders} WHERE id = ${folderId}
+      UNION ALL
+      SELECT f.id, f.parent_id, chain.depth + 1
+      FROM ${schema.folders} f
+      JOIN chain ON f.id = chain.parent_id
+      WHERE chain.depth < ${limit}
+    )
+    SELECT id, depth FROM chain WHERE depth > 0 ORDER BY depth ASC
+  `);
+  return rows.map((r) => r.id);
 }
 
 function buildTree(rows: FolderWithCount[]): FolderNode[] {
@@ -71,29 +72,42 @@ function buildTree(rows: FolderWithCount[]): FolderNode[] {
   return out;
 }
 
+// Sidebar-shaped tree of folders with image counts. Cached + shell-tagged
+// so it's shared across requests until a folder/image mutation calls
+// `revalidateAllViews()` (which busts the shell tag). The cache wrapper
+// is created lazily so this `"use server"` file's exports stay shaped as
+// plain async server actions.
+const cachedListFolders = unstable_cache(
+  async (): Promise<FolderNode[]> => {
+    const rows = await db
+      .select({
+        id: schema.folders.id,
+        name: schema.folders.name,
+        parentId: schema.folders.parentId,
+        count: sql<number>`count(${schema.imageFolders.imageId})`,
+      })
+      .from(schema.folders)
+      .leftJoin(
+        schema.imageFolders,
+        eq(schema.imageFolders.folderId, schema.folders.id),
+      )
+      .groupBy(schema.folders.id)
+      .orderBy(asc(schema.folders.name))
+      .all();
+    const flat: FolderWithCount[] = rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      parentId: r.parentId ?? null,
+      count: Number(r.count),
+    }));
+    return buildTree(flat);
+  },
+  ["folders:list"],
+  { tags: [SHELL_CACHE_TAG] },
+);
+
 export async function listFolders(): Promise<FolderNode[]> {
-  const rows = await db
-    .select({
-      id: schema.folders.id,
-      name: schema.folders.name,
-      parentId: schema.folders.parentId,
-      count: sql<number>`count(${schema.imageFolders.imageId})`,
-    })
-    .from(schema.folders)
-    .leftJoin(
-      schema.imageFolders,
-      eq(schema.imageFolders.folderId, schema.folders.id),
-    )
-    .groupBy(schema.folders.id)
-    .orderBy(asc(schema.folders.name))
-    .all();
-  const flat: FolderWithCount[] = rows.map((r) => ({
-    id: r.id,
-    name: r.name,
-    parentId: r.parentId ?? null,
-    count: Number(r.count),
-  }));
-  return buildTree(flat);
+  return cachedListFolders();
 }
 
 export async function getFolder(id: string): Promise<Folder | null> {

@@ -58,7 +58,7 @@ export function ManagePanel({
       <div className="pointer-events-auto border-t bg-background/95 shadow-xl backdrop-blur-md">
         <div
           className="flex flex-wrap items-center gap-3 p-4 md:px-6"
-          style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 1rem)" }}
+          style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 1.5rem)" }}
         >
           <span className="text-sm text-muted-foreground">
             {count} {count === 1 ? "image" : "images"} selected

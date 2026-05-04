@@ -49,7 +49,7 @@ export function TagSidebar({
                     className={cn("pr-7", SIDEBAR_LINK_DENSE)}
                   >
                     <TagIcon />
-                    <span className="flex-1 truncate">{t.name}</span>
+                    <span className="min-w-0 flex-1 truncate">{t.name}</span>
                   </SidebarMenuLink>
                 }
               />

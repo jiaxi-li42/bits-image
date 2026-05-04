@@ -1,21 +1,18 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { unstable_cache } from "next/cache";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { db, schema } from "@/db/client";
 import type { Tag as DbTag } from "@/db/schema";
+import { revalidateAllViews, SHELL_CACHE_TAG } from "@/lib/revalidate";
 
 // UI-facing slice (omits createdAt — none of the consumers need it).
 export type Tag = Pick<DbTag, "id" | "name">;
 export type TagWithCount = Tag & { count: number };
 
 const NameSchema = z.string().trim().min(1).max(64);
-
-function revalidateAllViews() {
-  revalidatePath("/", "layout");
-}
 
 function normalize(name: string): string {
   return name.trim().toLowerCase();
@@ -25,19 +22,34 @@ export type TagResult =
   | { status: "ok"; tag: Tag }
   | { status: "error"; message: string };
 
+// Sidebar-shaped tag list with image counts. Cached + shell-tagged
+// so it's shared across requests until a mutation calls
+// `revalidateAllViews()` (which busts the shell tag).
+const cachedListTags = unstable_cache(
+  async (): Promise<TagWithCount[]> => {
+    const rows = await db
+      .select({
+        id: schema.tags.id,
+        name: schema.tags.name,
+        count: sql<number>`count(${schema.imageTags.imageId})`,
+      })
+      .from(schema.tags)
+      .leftJoin(schema.imageTags, eq(schema.imageTags.tagId, schema.tags.id))
+      .groupBy(schema.tags.id)
+      .orderBy(asc(schema.tags.name))
+      .all();
+    return rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      count: Number(r.count),
+    }));
+  },
+  ["tags:list"],
+  { tags: [SHELL_CACHE_TAG] },
+);
+
 export async function listTags(): Promise<TagWithCount[]> {
-  const rows = await db
-    .select({
-      id: schema.tags.id,
-      name: schema.tags.name,
-      count: sql<number>`count(${schema.imageTags.imageId})`,
-    })
-    .from(schema.tags)
-    .leftJoin(schema.imageTags, eq(schema.imageTags.tagId, schema.tags.id))
-    .groupBy(schema.tags.id)
-    .orderBy(asc(schema.tags.name))
-    .all();
-  return rows.map((r) => ({ id: r.id, name: r.name, count: Number(r.count) }));
+  return cachedListTags();
 }
 
 export async function getTag(id: string): Promise<Tag | null> {
