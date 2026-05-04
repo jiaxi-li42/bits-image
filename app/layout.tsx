@@ -5,6 +5,7 @@ import "./globals.css";
 import { AppShell } from "@/modules/shell";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { IosInstallHint, RegisterSW } from "@/modules/pwa";
 import {
   AUTH_COOKIE_NAME,
   expectedAuthToken,
@@ -24,6 +25,12 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Bits Image",
   description: "Keep collecting, stay inspired.",
+  // iOS Safari ignores the manifest's icon array for home-screen
+  // installs — it specifically fetches /apple-touch-icon.png. Listed
+  // here so Next emits the matching <link rel="apple-touch-icon">.
+  icons: {
+    apple: "/apple-touch-icon.png",
+  },
 };
 
 // Disable the browser's native pinch-to-zoom and iOS double-tap-to-zoom.
@@ -68,6 +75,8 @@ export default async function RootLayout({
         <TooltipProvider>
           {authed ? <AppShell>{children}</AppShell> : children}
           <Toaster />
+          <IosInstallHint />
+          <RegisterSW />
         </TooltipProvider>
       </body>
     </html>

@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Layers2, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
+import { BrandMark } from "./brand-mark";
 import {
   Sidebar,
   SidebarContent,
@@ -23,7 +24,7 @@ import { useCreateEntity } from "./create-entity-context";
 import { NAV_ITEMS } from "./nav-items";
 import { useShell } from "./shell-context";
 
-const APP_VERSION = "v1.1";
+const APP_VERSION = "v1.2";
 
 // Tighter row metrics for desktop sidebar links (folders / tags). Mobile
 // keeps the default touch-friendly height; desktop tightens to fit more
@@ -59,7 +60,7 @@ export function AppSidebar() {
           className="flex items-center gap-3 rounded-md p-2 hover:bg-sidebar-accent"
         >
           <div className="flex size-9 items-center justify-center rounded-full bg-muted">
-            <Layers2 className="size-4 text-muted-foreground" />
+            <BrandMark className="size-6 text-foreground" />
           </div>
           <div className="leading-tight">
             <div className="text-sm font-semibold">Bits Image</div>

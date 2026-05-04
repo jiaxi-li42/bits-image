@@ -34,7 +34,12 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Run on every path except: Next's internals, static files, the unlock
-  // page (so it can render before authentication), and favicon.
-  matcher: ["/((?!_next/|unlock$|unlock/|favicon\\.ico).*)"],
+  // Run on every path except: Next's internals, the unlock page (so it
+  // can render before authentication), and the public PWA surface
+  // (manifest, service worker, icons, favicon, apple-touch-icon). The
+  // PWA assets must resolve before the gate or the install + offline
+  // experience breaks for first-time visitors.
+  matcher: [
+    "/((?!_next/|unlock$|unlock/|favicon\\.ico|sw\\.js$|manifest\\.webmanifest$|apple-touch-icon\\.png$|icons/).*)",
+  ],
 };
