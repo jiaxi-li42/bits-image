@@ -801,10 +801,17 @@ const Slide = memo(function Slide({
           // `aspect-(--image-ar)` on mobile keeps the slot height stable
           // regardless of the image's load state or transform. In fullscreen
           // we drop the aspect-ratio so the image fills the full slide.
+          //
+          // Rounding lives on this wrapper (with overflow-hidden) rather
+          // than on the <img> itself: padding on a replaced element pushes
+          // the painted image inward but border-radius clips the outer
+          // box, so a rounded <img> with padding shows its rounding in the
+          // transparent padding region while the image content keeps
+          // sharp corners. Wrapping clips the actual image content.
           className={`pointer-events-none flex w-full md:h-full items-start md:items-center justify-center md:p-8 max-md:relative${
             fullscreen
               ? " max-md:h-full max-md:p-0"
-              : " p-1 max-md:aspect-(--image-ar) max-md:p-0"
+              : " p-1 max-md:aspect-(--image-ar) max-md:mx-1 max-md:p-0 max-md:overflow-hidden max-md:rounded-xl"
           }`}
           style={
             { "--image-ar": `${img.width} / ${img.height}` } as React.CSSProperties
@@ -830,10 +837,10 @@ const Slide = memo(function Slide({
             // Active image transforms freely on desktop (clipped by the
             // stage's overflow-hidden). On mobile zoom>1 (escaped), hide
             // the in-flow copy — the overlay sibling renders the scaled
-            // image. Fullscreen drops border-radius and padding.
-            className={`block w-full h-full select-none object-contain md:w-auto md:h-auto md:max-h-full md:max-w-full md:rounded-none md:p-0${
-              fullscreen ? "" : " max-md:p-1 rounded-xl"
-            }${hideOnMobileWhenEscaped ? " max-md:invisible" : ""}`}
+            // image.
+            className={`block w-full h-full select-none object-contain md:w-auto md:h-auto md:max-h-full md:max-w-full${
+              hideOnMobileWhenEscaped ? " max-md:invisible" : ""
+            }`}
           />
         </div>
       </div>
