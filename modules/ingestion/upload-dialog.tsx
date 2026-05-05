@@ -20,7 +20,25 @@ import {
 } from "@/components/ui/tooltip";
 import { FLOATING_BUTTON_CLASS } from "@/modules/shell/mobile-floating-actions";
 import { cn } from "@/lib/utils";
-import { ingestFile } from "./server";
+import { checkExistingHashes, ingestFile } from "./server";
+
+/**
+ * Compute the SHA-256 of a File using the Web Crypto API. Used as a
+ * pre-flight before uploading bytes — if the hash is already in the DB
+ * we can skip the upload entirely. Mirrors the server's `sha256(buffer)`
+ * (both are byte-level SHA-256 → 64-char hex), so a client hit is also
+ * guaranteed to be a server hit.
+ */
+async function sha256Hex(file: File): Promise<string> {
+  const buf = await file.arrayBuffer();
+  const digest = await crypto.subtle.digest("SHA-256", buf);
+  const bytes = new Uint8Array(digest);
+  let out = "";
+  for (let i = 0; i < bytes.length; i++) {
+    out += bytes[i].toString(16).padStart(2, "0");
+  }
+  return out;
+}
 
 export function UploadButton({
   folderId,
@@ -69,7 +87,13 @@ export function UploadButton({
   );
 }
 
-type FileStatus = "queued" | "uploading" | "ok" | "duplicate" | "error";
+type FileStatus =
+  | "queued"
+  | "hashing"
+  | "uploading"
+  | "ok"
+  | "duplicate"
+  | "error";
 
 type Entry = {
   id: string;
@@ -118,9 +142,64 @@ function UploadDropzone({
       let dupCount = 0;
       let errCount = 0;
 
-      for (const entry of queued) {
+      // Phase 1 — hash all queued files locally in parallel. Web Crypto's
+      // SHA-256 is byte-identical to the server's `sha256(buffer)`, so a
+      // hash that's already in the DB is guaranteed to match.
+      setEntries((prev) =>
+        prev.map((e) =>
+          e.status === "queued" && queued.some((q) => q.id === e.id)
+            ? { ...e, status: "hashing" }
+            : e,
+        ),
+      );
+      const hashed: { entry: Entry; hash: string | null }[] = await Promise.all(
+        queued.map(async (entry) => {
+          try {
+            return { entry, hash: await sha256Hex(entry.file) };
+          } catch {
+            // If hashing fails (e.g. unreadable file), fall through to the
+            // server, which will surface a proper error.
+            return { entry, hash: null };
+          }
+        }),
+      );
+
+      // Phase 2 — single round-trip to ask the server which of those
+      // hashes are already on disk. Folder/tag are passed through so the
+      // server can attach existing rows in the same call (otherwise
+      // skipping the upload would silently drop those associations).
+      let existing: Record<string, string> = {};
+      try {
+        existing = await checkExistingHashes(
+          hashed.map((h) => h.hash).filter((h): h is string => !!h),
+          folderId,
+          tagId,
+        );
+      } catch {
+        // Server unreachable — fall back to per-file `ingestFile`, which
+        // still does the SHA dedup itself. Slower but correct.
+      }
+
+      // Phase 3 — for each file, either short-circuit as duplicate or
+      // upload through the existing path (which still catches perceptual
+      // dupes on the server).
+      for (const { entry, hash } of hashed) {
+        if (hash && existing[hash]) {
+          dupCount++;
+          setEntries((prev) =>
+            prev.map((e) =>
+              e.id === entry.id
+                ? { ...e, status: "duplicate", message: "Already in library" }
+                : e,
+            ),
+          );
+          continue;
+        }
+
         setEntries((prev) =>
-          prev.map((e) => (e.id === entry.id ? { ...e, status: "uploading" } : e)),
+          prev.map((e) =>
+            e.id === entry.id ? { ...e, status: "uploading" } : e,
+          ),
         );
         const fd = new FormData();
         fd.append("file", entry.file);
@@ -146,7 +225,9 @@ function UploadDropzone({
             errCount++;
             setEntries((prev) =>
               prev.map((e) =>
-                e.id === entry.id ? { ...e, status: "error", message: res.message } : e,
+                e.id === entry.id
+                  ? { ...e, status: "error", message: res.message }
+                  : e,
               ),
             );
           }
@@ -224,11 +305,14 @@ function UploadDropzone({
                   e.status === "ok" && "text-emerald-600",
                   e.status === "duplicate" && "text-amber-600",
                   e.status === "error" && "text-destructive",
-                  e.status === "uploading" && "text-muted-foreground",
-                  e.status === "queued" && "text-muted-foreground",
+                  (e.status === "uploading" ||
+                    e.status === "hashing" ||
+                    e.status === "queued") &&
+                    "text-muted-foreground",
                 )}
               >
                 {e.status === "queued" && "queued"}
+                {e.status === "hashing" && "checking…"}
                 {e.status === "uploading" && "uploading…"}
                 {e.status === "ok" && "✓ uploaded"}
                 {e.status === "duplicate" && "duplicate"}

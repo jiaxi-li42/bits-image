@@ -1,7 +1,7 @@
 import { PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import sharp from "sharp";
 import { getR2, getBucket } from "./client";
-import { sha256 } from "./hash";
+import { dhash, sha256 } from "./hash";
 
 const THUMB_WIDTHS = { grid: 400, detail: 1200 } as const;
 
@@ -23,6 +23,9 @@ export type UploadedImage = {
   width: number;
   height: number;
   hash: string;
+  /** 16-char hex dHash for perceptual-duplicate detection (re-encodes,
+   * resizes, format conversions). See `hash.ts` for the algorithm. */
+  phash: string;
   byteSize: number;
 };
 
@@ -32,6 +35,12 @@ export async function uploadImage(buffer: Buffer): Promise<UploadedImage> {
   const hash = sha256(buffer);
   const image = sharp(buffer, { failOn: "error" });
   const meta = await image.metadata();
+  // Compute the perceptual hash from the original bytes (sharp will
+  // greyscale + downscale internally). Done in parallel with format
+  // validation below isn't needed — sharp.metadata() and dhash both have
+  // to decode anyway, but dhash runs in its own sharp pipeline so we
+  // start it now and await before the DB lookup.
+  const phashPromise = dhash(buffer);
   if (!meta.width || !meta.height) {
     throw new Error("Could not read image dimensions");
   }
@@ -74,6 +83,7 @@ export async function uploadImage(buffer: Buffer): Promise<UploadedImage> {
     width: meta.width,
     height: meta.height,
     hash,
+    phash: await phashPromise,
     byteSize: buffer.length,
   };
 }
