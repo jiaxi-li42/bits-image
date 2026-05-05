@@ -1,7 +1,14 @@
 "use client";
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Minus, Plus, X } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Minimize2,
+  Minus,
+  Plus,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -124,6 +131,18 @@ export function Viewer({
     setFullscreen(false);
   }, [safeIndex]);
 
+  // The mobile slide is `overflow-y-auto` so the editor below the image
+  // can be reached on tall images. When the user enters fullscreen the
+  // editor is hidden and the image grows to h-full, but iOS preserves
+  // the slide's scrollTop — leaving the image visually offset (appears
+  // pushed toward the bottom). Reset scroll to 0 on fullscreen entry.
+  useEffect(() => {
+    if (!fullscreen) return;
+    const stage = inflowStageRef.current;
+    const slide = stage?.closest('[data-slot="carousel-item"]');
+    if (slide instanceof HTMLElement) slide.scrollTop = 0;
+  }, [fullscreen]);
+
   // Wire Embla -> React index sync, and jump to the requested startIndex
   // without animation when the carousel first mounts.
   useEffect(() => {
@@ -207,6 +226,17 @@ export function Viewer({
 
   const zoomIn = useCallback(() => {
     setZoom((z) => Math.min(MAX_ZOOM, +(z * ZOOM_STEP).toFixed(2)));
+  }, []);
+
+  // Exit mobile fullscreen — mirrors the double-tap reset so the minimize
+  // button and double-tap both clear zoom/pan/fullscreen together.
+  const exitFullscreen = useCallback(() => {
+    zoomRef.current = 1;
+    panRef.current = { x: 0, y: 0 };
+    fullscreenRef.current = false;
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+    setFullscreen(false);
   }, []);
 
   const zoomOut = useCallback(() => {
@@ -533,19 +563,20 @@ export function Viewer({
   const imageEscaped = zoom > 1;
 
   // Stable opts reference so Embla doesn't reInit unnecessarily — only
-  // re-create when `imageEscaped` toggles (the value Embla actually cares
-  // about for this viewer). New zoom values inside `imageEscaped=true`
-  // don't churn this object.
+  // re-create when `imageEscaped` or `fullscreen` toggles. New zoom values
+  // inside `imageEscaped=true` don't churn this object.
   const carouselOpts = useMemo(
     () => ({
       align: "start" as const,
       containScroll: "trimSnaps" as const,
       // Embla auto-detects axis; vertical scroll inside slides passes
-      // through to the native scroll container.
-      watchDrag: !imageEscaped,
+      // through to the native scroll container. Disable drag in
+      // fullscreen too — the user has signalled they want to focus on
+      // the active image, so an accidental swipe shouldn't switch it.
+      watchDrag: !imageEscaped && !fullscreen,
       duration: 20,
     }),
-    [imageEscaped],
+    [imageEscaped, fullscreen],
   );
 
   if (!current) return null;
@@ -560,9 +591,10 @@ export function Viewer({
   };
 
   const imageTransform = `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`;
-  const imageTransition = isDragging
-    ? "border-radius 300ms ease-out"
-    : "transform 120ms ease-out, border-radius 300ms ease-out";
+  // `transform` applies on the same frame as state updates — pinch / pan
+  // / wheel-zoom track input 1:1. Only `border-radius` is transitioned,
+  // for the rounded-corner fade when toggling fullscreen.
+  const imageTransition = "border-radius 300ms ease-out";
 
   return (
     <div
@@ -587,16 +619,22 @@ export function Viewer({
         style={{ opacity: zoom > 1 || fullscreen ? 1 : 0 }}
       />
 
-      {/* Mobile-only close (X) — pinned to the viewport. */}
+      {/* Mobile-only top-left button — pinned to the viewport. In normal
+          mode it's a Close (X) for the viewer; in fullscreen it becomes
+          a Minimize (exits fullscreen instead of closing the viewer). */}
       <Button
         type="button"
         variant="ghost"
         size="icon"
-        onClick={stopAnd(closeWithCurrent)}
-        aria-label="Close"
+        onClick={stopAnd(fullscreen ? exitFullscreen : closeWithCurrent)}
+        aria-label={fullscreen ? "Exit fullscreen" : "Close"}
         className="absolute top-3 left-3 z-[60] size-9 rounded-md bg-foreground/70 text-background shadow-sm hover:bg-foreground/80 hover:text-background md:hidden"
       >
-        <X className="size-4" />
+        {fullscreen ? (
+          <Minimize2 className="size-4" />
+        ) : (
+          <X className="size-4" />
+        )}
       </Button>
 
       {/* Carousel container is `z-[55]` so the in-flow image sits above
@@ -614,7 +652,11 @@ export function Viewer({
               return (
                 <CarouselItem
                   key={img.id}
-                  className="h-full overflow-y-auto md:overflow-hidden"
+                  // Hide the visual scrollbar — the slide is intentionally
+                  // scrollable on mobile when image+editor exceeds the
+                  // viewport, but the persistent gutter looks like it
+                  // belongs to the image. Scroll behaviour itself stays.
+                  className="h-full overflow-y-auto md:overflow-hidden [&::-webkit-scrollbar]:hidden [scrollbar-width:none]"
                 >
                   <Slide
                     img={img}
@@ -723,7 +765,13 @@ export function Viewer({
       {/* Escape hatch for the active image when zoom > 1 on mobile.
           Sibling of the carousel so its own transform isn't trapped by
           Embla's translate3d on the slide track. Hidden on desktop —
-          desktop applies the transform to the in-flow image directly. */}
+          desktop applies the transform to the in-flow image directly.
+          The img is sized via `width`/`height` + `max-w-full max-h-full`
+          (NOT `w-full h-full object-contain`) so that its `offsetWidth/
+          Height` matches the rendered image content rather than the
+          viewport-sized box. clampPan then computes pan limits against
+          the actual visible image, so swiping while zoomed can't move
+          the image past its edges into letterbox space. */}
       {imageEscaped ? (
         <div
           ref={overlayRef}
@@ -732,6 +780,8 @@ export function Viewer({
           <img
             src={`/api/img/detail/${current.hash}`}
             alt={current.title ?? ""}
+            width={current.width}
+            height={current.height}
             draggable={false}
             decoding="async"
             style={{
@@ -740,7 +790,7 @@ export function Viewer({
               transition: imageTransition,
               cursor,
             }}
-            className="block h-full w-full select-none object-contain"
+            className="block max-h-full max-w-full select-none"
           />
         </div>
       ) : null}
@@ -801,17 +851,10 @@ const Slide = memo(function Slide({
           // `aspect-(--image-ar)` on mobile keeps the slot height stable
           // regardless of the image's load state or transform. In fullscreen
           // we drop the aspect-ratio so the image fills the full slide.
-          //
-          // Rounding lives on this wrapper (with overflow-hidden) rather
-          // than on the <img> itself: padding on a replaced element pushes
-          // the painted image inward but border-radius clips the outer
-          // box, so a rounded <img> with padding shows its rounding in the
-          // transparent padding region while the image content keeps
-          // sharp corners. Wrapping clips the actual image content.
           className={`pointer-events-none flex w-full md:h-full items-start md:items-center justify-center md:p-8 max-md:relative${
             fullscreen
               ? " max-md:h-full max-md:p-0"
-              : " p-1 max-md:aspect-(--image-ar) max-md:mx-1 max-md:p-0 max-md:overflow-hidden max-md:rounded-xl"
+              : " p-1 max-md:aspect-(--image-ar) max-md:m-1 max-md:p-0"
           }`}
           style={
             { "--image-ar": `${img.width} / ${img.height}` } as React.CSSProperties
@@ -837,10 +880,15 @@ const Slide = memo(function Slide({
             // Active image transforms freely on desktop (clipped by the
             // stage's overflow-hidden). On mobile zoom>1 (escaped), hide
             // the in-flow copy — the overlay sibling renders the scaled
-            // image.
-            className={`block w-full h-full select-none object-contain md:w-auto md:h-auto md:max-h-full md:max-w-full${
-              hideOnMobileWhenEscaped ? " max-md:invisible" : ""
-            }`}
+            // image. `rounded-xl` is on the img (toggled off in fullscreen)
+            // so the existing `border-radius 300ms` transition can animate
+            // the corner change. The AR wrapper matches the image AR
+            // exactly, so the img has no padding and the rounded edge sits
+            // on the actual image content (not in a transparent padding
+            // gutter).
+            className={`block w-full h-full select-none object-contain md:w-auto md:h-auto md:max-h-full md:max-w-full md:rounded-none${
+              fullscreen ? "" : " max-md:rounded-xl"
+            }${hideOnMobileWhenEscaped ? " max-md:invisible" : ""}`}
           />
         </div>
       </div>
