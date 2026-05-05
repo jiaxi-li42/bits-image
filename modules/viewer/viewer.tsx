@@ -1,6 +1,14 @@
 "use client";
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -179,6 +187,55 @@ export function Viewer({
   const inflowStageRef = useRef<HTMLDivElement | null>(null);
   const overlayRef = useRef<HTMLDivElement | null>(null);
 
+  // FLIP animation for fullscreen enter/exit (mobile). Caller measures the
+  // in-flow img's rect BEFORE flipping fullscreen state; the layout-effect
+  // below measures the new rect after React commits the new layout, then
+  // animates the inverse transform back to identity over FULLSCREEN_MS.
+  // Runs only when `flipFromRectRef` is populated, so other indirect
+  // setFullscreen(false) call sites (e.g. slide change) snap instantly.
+  const FULLSCREEN_MS = 200;
+  // Spring-out curve — fast initial settle, gentle finish. Same shape used
+  // by Vercel/Linear for sheet/dialog transitions.
+  const FULLSCREEN_EASE = "cubic-bezier(0.32, 0.72, 0, 1)";
+  const flipFromRectRef = useRef<DOMRect | null>(null);
+  const captureFlip = useCallback(() => {
+    const img = inflowStageRef.current?.querySelector("img");
+    if (img instanceof HTMLImageElement) {
+      flipFromRectRef.current = img.getBoundingClientRect();
+    }
+  }, []);
+  useLayoutEffect(() => {
+    const fromRect = flipFromRectRef.current;
+    if (!fromRect) return;
+    flipFromRectRef.current = null;
+    const img = inflowStageRef.current?.querySelector("img");
+    if (!(img instanceof HTMLImageElement)) return;
+    const toRect = img.getBoundingClientRect();
+    if (toRect.width === 0 || toRect.height === 0) return;
+    const dx = fromRect.left - toRect.left;
+    const dy = fromRect.top - toRect.top;
+    const sx = fromRect.width / toRect.width;
+    const sy = fromRect.height / toRect.height;
+    if (
+      Math.abs(dx) < 0.5 &&
+      Math.abs(dy) < 0.5 &&
+      Math.abs(sx - 1) < 0.001 &&
+      Math.abs(sy - 1) < 0.001
+    ) {
+      return;
+    }
+    img.animate(
+      [
+        {
+          transformOrigin: "0 0",
+          transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})`,
+        },
+        { transformOrigin: "0 0", transform: "none" },
+      ],
+      { duration: FULLSCREEN_MS, easing: FULLSCREEN_EASE },
+    );
+  }, [fullscreen]);
+
   const clampPan = useCallback(
     (raw: { x: number; y: number }, atZoom: number) => {
       // Pick the visible stage. The overlay is always mounted when zoom > 1
@@ -229,15 +286,18 @@ export function Viewer({
   }, []);
 
   // Exit mobile fullscreen — mirrors the double-tap reset so the minimize
-  // button and double-tap both clear zoom/pan/fullscreen together.
+  // button and double-tap both clear zoom/pan/fullscreen together. Captures
+  // the FLIP source rect before the state change so the layout effect can
+  // animate the image back to its AR-slot.
   const exitFullscreen = useCallback(() => {
+    captureFlip();
     zoomRef.current = 1;
     panRef.current = { x: 0, y: 0 };
     fullscreenRef.current = false;
     setZoom(1);
     setPan({ x: 0, y: 0 });
     setFullscreen(false);
-  }, []);
+  }, [captureFlip]);
 
   const zoomOut = useCallback(() => {
     setZoom((z) => Math.max(MIN_ZOOM, +(z / ZOOM_STEP).toFixed(2)));
@@ -432,6 +492,7 @@ export function Viewer({
         !fullscreenRef.current &&
         Math.hypot(t.clientX - tapStart.x, t.clientY - tapStart.y) <= TAP_MAX_PX
       ) {
+        captureFlip();
         setFullscreen(true);
       }
       tapStartRef.current = null;
@@ -524,6 +585,10 @@ export function Viewer({
       if (zoomRef.current <= 1 && !fullscreenRef.current) return;
       e.preventDefault();
       e.stopPropagation();
+      // Capture FLIP source rect only when fullscreen is actually exiting,
+      // so a pure zoom-reset (zoom>1, no fullscreen) doesn't trigger a
+      // FLIP animation that the layout effect would discard anyway.
+      if (fullscreenRef.current) captureFlip();
       zoomRef.current = 1;
       panRef.current = { x: 0, y: 0 };
       fullscreenRef.current = false;
@@ -593,8 +658,8 @@ export function Viewer({
   const imageTransform = `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`;
   // `transform` applies on the same frame as state updates — pinch / pan
   // / wheel-zoom track input 1:1. Only `border-radius` is transitioned,
-  // for the rounded-corner fade when toggling fullscreen.
-  const imageTransition = "border-radius 300ms ease-out";
+  // synced to the FLIP animation duration / easing for fullscreen toggles.
+  const imageTransition = `border-radius ${FULLSCREEN_MS}ms ${FULLSCREEN_EASE}`;
 
   return (
     <div
@@ -612,10 +677,11 @@ export function Viewer({
       />
 
       {/* Mobile fullscreen-zoom backdrop. Always mounted with opacity 0 so
-          the fade-in transitions when zoom crosses 1 or fullscreen toggles. */}
+          the fade-in transitions when zoom crosses 1 or fullscreen toggles.
+          Duration / easing synced to the FLIP animation. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 z-[54] bg-background/40 backdrop-blur-xl backdrop-saturate-150 transition-opacity duration-300 ease-out md:hidden"
+        className="pointer-events-none absolute inset-0 z-[54] bg-background/40 backdrop-blur-xl backdrop-saturate-150 transition-opacity duration-200 ease-[cubic-bezier(0.32,0.72,0,1)] md:hidden"
         style={{ opacity: zoom > 1 || fullscreen ? 1 : 0 }}
       />
 
@@ -851,10 +917,10 @@ const Slide = memo(function Slide({
           // `aspect-(--image-ar)` on mobile keeps the slot height stable
           // regardless of the image's load state or transform. In fullscreen
           // we drop the aspect-ratio so the image fills the full slide.
-          className={`pointer-events-none flex w-full md:h-full items-start md:items-center justify-center md:p-8 max-md:relative${
+          className={`pointer-events-none flex w-full md:h-full justify-center md:p-8 max-md:relative${
             fullscreen
-              ? " max-md:h-full max-md:p-0"
-              : " p-1 max-md:aspect-(--image-ar) max-md:m-1 max-md:p-0"
+              ? " max-md:h-full max-md:p-0 items-center"
+              : " p-1 max-md:aspect-(--image-ar) max-md:m-1 max-md:p-0 items-start md:items-center"
           }`}
           style={
             { "--image-ar": `${img.width} / ${img.height}` } as React.CSSProperties
@@ -863,6 +929,15 @@ const Slide = memo(function Slide({
           <img
             src={`/api/img/detail/${img.hash}`}
             alt={img.title ?? ""}
+            // Intrinsic dimensions let the browser AR-fit the image
+            // before pixels arrive, and — combined with `max-h-full
+            // max-w-full` instead of `w-full h-full object-contain` —
+            // make the img element match the visible content rect (no
+            // viewport-sized letterbox box). The FLIP animation reads
+            // `getBoundingClientRect()` from this element, so it starts
+            // from the actual image and not the entire screen.
+            width={img.width}
+            height={img.height}
             draggable={false}
             // Browser defers loading detail-size bytes until the slide
             // is near the viewport. Embla keeps neighbours in the DOM but
@@ -877,16 +952,11 @@ const Slide = memo(function Slide({
               transformOrigin: "center center",
               transition,
             }}
-            // Active image transforms freely on desktop (clipped by the
-            // stage's overflow-hidden). On mobile zoom>1 (escaped), hide
-            // the in-flow copy — the overlay sibling renders the scaled
-            // image. `rounded-xl` is on the img (toggled off in fullscreen)
-            // so the existing `border-radius 300ms` transition can animate
-            // the corner change. The AR wrapper matches the image AR
-            // exactly, so the img has no padding and the rounded edge sits
-            // on the actual image content (not in a transparent padding
-            // gutter).
-            className={`block w-full h-full select-none object-contain md:w-auto md:h-auto md:max-h-full md:max-w-full md:rounded-none${
+            // `rounded-xl` is on the img (toggled off in fullscreen) so
+            // the inline `border-radius` transition can animate the
+            // corner change. On mobile zoom>1 (escaped), hide the in-flow
+            // copy — the overlay sibling renders the scaled image.
+            className={`block max-h-full max-w-full select-none md:rounded-none${
               fullscreen ? "" : " max-md:rounded-xl"
             }${hideOnMobileWhenEscaped ? " max-md:invisible" : ""}`}
           />
