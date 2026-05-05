@@ -301,11 +301,6 @@ export function DetailEditor({
             </Button>
           </>
         )}
-        {pending ? (
-          <span className="text-xs text-muted-foreground md:ml-auto">
-            Saving…
-          </span>
-        ) : null}
       </footer>
 
       <ConfirmDeleteDialog

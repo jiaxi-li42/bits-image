@@ -952,11 +952,18 @@ const Slide = memo(function Slide({
               transformOrigin: "center center",
               transition,
             }}
-            // `rounded-xl` is on the img (toggled off in fullscreen) so
-            // the inline `border-radius` transition can animate the
-            // corner change. On mobile zoom>1 (escaped), hide the in-flow
-            // copy — the overlay sibling renders the scaled image.
-            className={`block max-h-full max-w-full select-none md:rounded-none${
+            // `object-contain` is essential — `max-w-full` and `max-h-full`
+            // clamp the box independently, so without object-contain a
+            // square image inside a 992×836 area would stretch to the box
+            // (1.18 ratio). object-contain keeps the rendered content
+            // AR-correct regardless of the box's shape. The FLIP animation
+            // animates the box rect; object-contain ensures the visible
+            // image scales proportionally throughout. `rounded-xl` is on
+            // the img (toggled off in fullscreen) so the inline
+            // `border-radius` transition animates the corner change. On
+            // mobile zoom>1 (escaped), hide the in-flow copy — the overlay
+            // sibling renders the scaled image.
+            className={`block max-h-full max-w-full select-none object-contain md:rounded-none${
               fullscreen ? "" : " max-md:rounded-xl"
             }${hideOnMobileWhenEscaped ? " max-md:invisible" : ""}`}
           />
