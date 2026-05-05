@@ -81,13 +81,12 @@ export async function ViewPage({
   const isFiltered =
     (showTagFilter && tagIds.length > 0) || Boolean(query.trim());
 
-  const folderLabel = folder?.path ?? folder?.name ?? "";
   let title = meta.title;
   let emptyTitle = meta.emptyTitle;
   let emptyBody = meta.emptyBody;
 
   if (folder) {
-    title = folderLabel;
+    title = folder.name;
     emptyTitle = "Folder is empty";
     emptyBody = "Move images into this folder from the image details panel.";
   } else if (tag) {

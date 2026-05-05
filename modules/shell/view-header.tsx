@@ -23,10 +23,13 @@ export function ViewHeader({
         <SearchBar />
       </div>
 
-      {/* Desktop: title + optional action; search lives in toolbar row below */}
+      {/* Desktop: title with the optional action sitting immediately next
+          to it (not pushed to the right edge). `min-w-0` on the h1 with
+          flex-shrink default lets a long title truncate so the action
+          stays visible. */}
       <header className="hidden md:block md:px-6 md:pt-6 md:pb-3">
-        <div className="flex items-center gap-1">
-          <h1 className="min-w-0 flex-1 truncate text-lg font-semibold tracking-tight md:text-xl">
+        <div className="flex items-center gap-2">
+          <h1 className="min-w-0 truncate text-lg font-semibold tracking-tight md:text-xl">
             {title}
           </h1>
           {action}
