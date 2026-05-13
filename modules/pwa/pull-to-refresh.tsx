@@ -21,6 +21,10 @@ const VISIBLE_MIN_PX = 4;
 // frosted-glass effect without making the underlying UI illegible or
 // burning GPU cycles on iOS.
 const MAX_BLUR_PX = 8;
+// Duration (ms) for every release/rest CSS transition — spinner travel,
+// veil fade + blur, icon rotation snap-back. Centralised so the whole
+// indicator stays in lockstep when tuning the feel.
+const TRANSITION_MS = 150;
 
 // Selector matching anything that owns its own touch behaviour: the image
 // viewer (`role="dialog"` + `data-viewer`), shadcn dialogs / popovers /
@@ -159,6 +163,12 @@ export function PullToRefresh() {
   const visible = pull > VISIBLE_MIN_PX || refreshing;
   const progress = Math.min(1, pull / TRIGGER_PX);
   const blur = progress * MAX_BLUR_PX;
+  // Rotation has its own progress driven by the full pull range, not by
+  // `progress` (which saturates at `TRIGGER_PX`). Otherwise the icon
+  // freezes the moment the trigger is crossed and the overshoot zone
+  // (TRIGGER_PX → MAX_PULL_PX) feels broken. Going to a full 360°
+  // also reads better than the half-turn the old 270° cap produced.
+  const rotation = Math.min(1, pull / MAX_PULL_PX) * 360;
 
   return (
     <>
@@ -179,7 +189,7 @@ export function PullToRefresh() {
           WebkitBackdropFilter: `blur(${blur}px) saturate(1.1)`,
           transition: tracking.current
             ? "none"
-            : "opacity 150ms cubic-bezier(0.32, 0.72, 0, 1), backdrop-filter 150ms, -webkit-backdrop-filter 150ms",
+            : `opacity ${TRANSITION_MS}ms cubic-bezier(0.32, 0.72, 0, 1), backdrop-filter ${TRANSITION_MS}ms, -webkit-backdrop-filter ${TRANSITION_MS}ms`,
         }}
       />
       <div
@@ -193,7 +203,7 @@ export function PullToRefresh() {
           opacity: visible ? 1 : 0,
           transition: tracking.current
             ? "none"
-            : "transform 150ms cubic-bezier(0.32, 0.72, 0, 1), opacity 150ms",
+            : `transform ${TRANSITION_MS}ms cubic-bezier(0.32, 0.72, 0, 1), opacity ${TRANSITION_MS}ms`,
         }}
       >
         <div className="mt-1 rounded-full border bg-background p-2 shadow-sm">
@@ -206,8 +216,10 @@ export function PullToRefresh() {
               refreshing
                 ? undefined
                 : {
-                    transform: `rotate(${progress * 270}deg)`,
-                    transition: tracking.current ? "none" : "transform 150ms",
+                    transform: `rotate(${rotation}deg)`,
+                    transition: tracking.current
+                      ? "none"
+                      : `transform ${TRANSITION_MS}ms`,
                   }
             }
           />
