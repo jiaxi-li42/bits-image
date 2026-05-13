@@ -5,7 +5,7 @@ import "./globals.css";
 import { AppShell } from "@/modules/shell";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { IosInstallHint, RegisterSW } from "@/modules/pwa";
+import { IosInstallHint, PullToRefresh, RegisterSW } from "@/modules/pwa";
 import {
   AUTH_COOKIE_NAME,
   expectedAuthToken,
@@ -76,6 +76,7 @@ export default async function RootLayout({
           {authed ? <AppShell>{children}</AppShell> : children}
           <Toaster />
           <IosInstallHint />
+          {authed ? <PullToRefresh /> : null}
           <RegisterSW />
         </TooltipProvider>
       </body>

@@ -1,8 +1,8 @@
 "use server";
 
-import { eq, inArray, isNotNull } from "drizzle-orm";
+import { inArray, isNotNull } from "drizzle-orm";
 import { db, schema } from "@/db/client";
-import { deleteAllForHash, getOriginalUrl } from "@/modules/storage";
+import { deleteAllForHash } from "@/modules/storage";
 import { revalidateAllViews } from "@/lib/revalidate";
 
 export async function emptyTrash(): Promise<{ removed: number }> {
@@ -31,14 +31,4 @@ export async function emptyTrash(): Promise<{ removed: number }> {
 
   revalidateAllViews();
   return { removed: rows.length };
-}
-
-export async function getDownloadUrl(id: string): Promise<string | null> {
-  const row = await db
-    .select({ hash: schema.images.hash })
-    .from(schema.images)
-    .where(eq(schema.images.id, id))
-    .get();
-  if (!row) return null;
-  return getOriginalUrl(row.hash, 300);
 }

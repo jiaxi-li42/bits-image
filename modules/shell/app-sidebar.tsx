@@ -24,7 +24,7 @@ import { useCreateEntity } from "./create-entity-context";
 import { NAV_ITEMS } from "./nav-items";
 import { useShell } from "./shell-context";
 
-const APP_VERSION = "v1.4";
+const APP_VERSION = "v1.5";
 
 // Tighter row metrics for desktop sidebar links (folders / tags). Mobile
 // keeps the default touch-friendly height; desktop tightens to fit more

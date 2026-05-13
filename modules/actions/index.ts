@@ -1,2 +1,2 @@
 export { TrashEmptyButton } from "./trash-bulk-actions";
-export { emptyTrash, getDownloadUrl } from "./server";
+export { emptyTrash } from "./server";

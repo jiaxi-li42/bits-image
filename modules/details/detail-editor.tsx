@@ -14,7 +14,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ConfirmDeleteDialog } from "@/modules/shell/confirm-delete-dialog";
 import { TagPicker } from "@/modules/tags";
 import { FolderPicker } from "@/modules/folders";
-import { getDownloadUrl } from "@/modules/actions/server";
 import {
   hardDeleteImages,
   restoreImages,
@@ -113,22 +112,14 @@ export function DetailEditor({
     handleSubmit(onSubmit)();
   };
 
-  const onDownload = async () => {
-    const url = await getDownloadUrl(imageId);
-    if (!url) {
-      toast.error("Could not get download URL");
-      return;
-    }
-    // Open the signed R2 URL in a new tab so the current details page
-    // stays put. The browser-native `download` attribute is ignored on
-    // cross-origin URLs, which (without target=_blank) causes mobile
-    // Safari to navigate the current tab to the image and lose the
-    // viewer state.
+  const onDownload = () => {
+    // Same-origin route that streams the original with `Content-Disposition:
+    // attachment` — the browser sees that header and triggers a download
+    // instead of navigating, so we don't need (and don't want) a new tab.
+    // The previous `target="_blank"` flow broke inside iOS standalone PWAs,
+    // where WebKit can't open a new window and the click did nothing.
     const a = document.createElement("a");
-    a.href = url;
-    a.target = "_blank";
-    a.rel = "noopener noreferrer";
-    a.download = "";
+    a.href = `/api/download/${imageId}`;
     document.body.appendChild(a);
     a.click();
     a.remove();

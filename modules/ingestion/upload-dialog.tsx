@@ -299,25 +299,41 @@ function UploadDropzone({
                 />
                 <TooltipContent>{e.file.name}</TooltipContent>
               </Tooltip>
-              <span
-                className={cn(
-                  "shrink-0 text-xs",
-                  e.status === "ok" && "text-emerald-600",
-                  e.status === "duplicate" && "text-amber-600",
-                  e.status === "error" && "text-destructive",
-                  (e.status === "uploading" ||
-                    e.status === "hashing" ||
-                    e.status === "queued") &&
-                    "text-muted-foreground",
-                )}
-              >
-                {e.status === "queued" && "queued"}
-                {e.status === "hashing" && "checking…"}
-                {e.status === "uploading" && "uploading…"}
-                {e.status === "ok" && "✓ uploaded"}
-                {e.status === "duplicate" && "duplicate"}
-                {e.status === "error" && (e.message ?? "failed")}
-              </span>
+              {e.status === "error" ? (
+                // Error messages can be arbitrarily long ("Unsupported image
+                // format: heif. Allowed: JPEG, …"). `shrink-0` would push the
+                // span past the dialog edge and force a horizontal page
+                // scroll, so we let it truncate and surface the full text via
+                // tooltip instead.
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <span className="min-w-0 max-w-[50%] truncate text-xs text-destructive">
+                        {e.message ?? "failed"}
+                      </span>
+                    }
+                  />
+                  <TooltipContent>{e.message ?? "failed"}</TooltipContent>
+                </Tooltip>
+              ) : (
+                <span
+                  className={cn(
+                    "shrink-0 text-xs",
+                    e.status === "ok" && "text-emerald-600",
+                    e.status === "duplicate" && "text-amber-600",
+                    (e.status === "uploading" ||
+                      e.status === "hashing" ||
+                      e.status === "queued") &&
+                      "text-muted-foreground",
+                  )}
+                >
+                  {e.status === "queued" && "queued"}
+                  {e.status === "hashing" && "checking…"}
+                  {e.status === "uploading" && "uploading…"}
+                  {e.status === "ok" && "uploaded"}
+                  {e.status === "duplicate" && "duplicate"}
+                </span>
+              )}
             </li>
           ))}
         </ul>

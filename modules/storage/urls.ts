@@ -14,10 +14,3 @@ export async function getSignedImageUrl(
     { expiresIn: expiresInSeconds },
   );
 }
-
-export async function getOriginalUrl(
-  hash: string,
-  expiresInSeconds = 3600,
-): Promise<string> {
-  return getSignedImageUrl(`originals/${hash}`, expiresInSeconds);
-}
