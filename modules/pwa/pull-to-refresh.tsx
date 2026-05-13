@@ -3,19 +3,24 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { RefreshCw } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 // Pixels the user has to pull past before release triggers a refresh.
-const TRIGGER_PX = 70;
+const TRIGGER_PX = 60;
 // Hard cap on the visible pull so a long flick doesn't shoot the spinner
 // halfway down the screen.
-const MAX_PULL_PX = 110;
+const MAX_PULL_PX = 100;
 // Resistance applied to finger movement. The indicator should feel like
 // it's pulling against rubber, not tracking 1:1.
 const FRICTION = 0.5;
 // Threshold for the spinner to fade in. Below this we treat the pull as
 // noise (incidental finger jitter at the top of the page).
 const VISIBLE_MIN_PX = 4;
+// Maximum backdrop blur radius at full pull. ~8px reads as a clear
+// frosted-glass effect without making the underlying UI illegible or
+// burning GPU cycles on iOS.
+const MAX_BLUR_PX = 8;
 
 // Selector matching anything that owns its own touch behaviour: the image
 // viewer (`role="dialog"` + `data-viewer`), shadcn dialogs / popovers /
@@ -127,6 +132,9 @@ export function PullToRefresh() {
           setRefreshing(false);
           pullRef.current = 0;
           setPull(0);
+          // Bottom-center toast — visible feedback that something
+          // actually happened, since the spinner has just faded away.
+          toast("Page refreshed");
         }, 700);
       } else {
         pullRef.current = 0;
@@ -150,38 +158,61 @@ export function PullToRefresh() {
 
   const visible = pull > VISIBLE_MIN_PX || refreshing;
   const progress = Math.min(1, pull / TRIGGER_PX);
+  const blur = progress * MAX_BLUR_PX;
 
   return (
-    <div
-      aria-hidden="true"
-      // Anchor at the very top; transform pushes the indicator into view
-      // proportional to the pull. `safe-area-inset-top` keeps it clear of
-      // the iOS status bar / notch in standalone mode.
-      className="pointer-events-none fixed inset-x-0 top-0 z-[60] flex justify-center"
-      style={{
-        transform: `translateY(calc(env(safe-area-inset-top) + ${Math.max(0, pull - 28)}px))`,
-        opacity: visible ? 1 : 0,
-        transition: tracking.current
-          ? "none"
-          : "transform 220ms cubic-bezier(0.32, 0.72, 0, 1), opacity 220ms",
-      }}
-    >
-      <div className="mt-1 rounded-full border bg-background p-2 shadow-sm">
-        <RefreshCw
-          className={cn(
-            "size-4 text-muted-foreground",
-            refreshing && "animate-spin",
-          )}
-          style={
-            refreshing
-              ? undefined
-              : {
-                  transform: `rotate(${progress * 270}deg)`,
-                  transition: tracking.current ? "none" : "transform 220ms",
-                }
-          }
-        />
+    <>
+      {/* Full-viewport frosted-glass veil that intensifies with the pull.
+          Sits below the spinner (z-55 vs z-60) so the spinner stays
+          crisp, but above the page content and floating action buttons
+          so the whole UI fogs uniformly. The blur radius and a thin
+          background tint both scale with `progress` so the effect ramps
+          in smoothly rather than popping. We transition the filter and
+          opacity together on release; during active tracking it's
+          driven by re-renders so it tracks the finger 1:1. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none fixed inset-0 z-[55] bg-background/10"
+        style={{
+          opacity: visible ? progress : 0,
+          backdropFilter: `blur(${blur}px) saturate(1.1)`,
+          WebkitBackdropFilter: `blur(${blur}px) saturate(1.1)`,
+          transition: tracking.current
+            ? "none"
+            : "opacity 150ms cubic-bezier(0.32, 0.72, 0, 1), backdrop-filter 150ms, -webkit-backdrop-filter 150ms",
+        }}
+      />
+      <div
+        aria-hidden="true"
+        // Anchor at the very top; transform pushes the indicator into view
+        // proportional to the pull. `safe-area-inset-top` keeps it clear of
+        // the iOS status bar / notch in standalone mode.
+        className="pointer-events-none fixed inset-x-0 top-0 z-[60] flex justify-center"
+        style={{
+          transform: `translateY(calc(env(safe-area-inset-top) + ${Math.max(0, pull - 28)}px))`,
+          opacity: visible ? 1 : 0,
+          transition: tracking.current
+            ? "none"
+            : "transform 150ms cubic-bezier(0.32, 0.72, 0, 1), opacity 150ms",
+        }}
+      >
+        <div className="mt-1 rounded-full border bg-background p-2 shadow-sm">
+          <RefreshCw
+            className={cn(
+              "size-4 text-muted-foreground",
+              refreshing && "animate-spin",
+            )}
+            style={
+              refreshing
+                ? undefined
+                : {
+                    transform: `rotate(${progress * 270}deg)`,
+                    transition: tracking.current ? "none" : "transform 150ms",
+                  }
+            }
+          />
+        </div>
       </div>
-    </div>
+    </>
   );
 }
