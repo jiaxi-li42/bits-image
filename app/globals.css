@@ -129,6 +129,37 @@
   }
 }
 
+/* Custom OverlayScrollbars theme tied to the app's `--foreground` so it
+ * tracks light/dark mode automatically — no need to re-instantiate the
+ * plugin when the theme changes. Selected via `theme: "os-theme-app"`
+ * in `OverlayScrollbarsInit`.
+ *
+ * `!important` on each var because OS' core CSS defines the same vars
+ * at `.os-scrollbar` (equal specificity) and loads after this file, so
+ * an un-flagged single-class selector loses the cascade. Tailwind v4's
+ * pipeline also drops a leading `.os-scrollbar` we tried to stack here
+ * for specificity, so `!important` is the route that actually sticks. */
+.os-theme-app {
+  --os-size: 10px !important;
+  --os-padding-perpendicular: 2px !important;
+  --os-padding-axis: 2px !important;
+  --os-track-border-radius: 9999px !important;
+  --os-track-bg: transparent !important;
+  --os-track-bg-hover: transparent !important;
+  --os-track-bg-active: transparent !important;
+  --os-handle-border-radius: 9999px !important;
+  --os-handle-bg: color-mix(in oklab, var(--foreground) 30%, transparent)
+    !important;
+  --os-handle-bg-hover: color-mix(in oklab, var(--foreground) 50%, transparent)
+    !important;
+  --os-handle-bg-active: color-mix(in oklab, var(--foreground) 60%, transparent)
+    !important;
+  --os-handle-min-size: 33px !important;
+  --os-handle-perpendicular-size: 100% !important;
+  --os-handle-perpendicular-size-hover: 100% !important;
+  --os-handle-perpendicular-size-active: 100% !important;
+}
+
 @keyframes shake-x {
   0%, 100% { transform: translateX(0); }
   20%, 60% { transform: translateX(-6px); }

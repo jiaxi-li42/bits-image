@@ -170,12 +170,17 @@ export function Viewer({
     api?.reInit();
   }, [api, total]);
 
-  // Lock body scroll while the viewer is open.
+  // Lock background scroll while the viewer is open. We set
+  // `documentElement.style.overflow` rather than `body.style.overflow`
+  // because OverlayScrollbars treats `<html>` as the scroll viewport
+  // when initialized on `<body>` — `body.style.overflow` no longer
+  // cascades to the viewport, so the lock wouldn't actually lock.
   useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    const html = document.documentElement;
+    const prev = html.style.overflow;
+    html.style.overflow = "hidden";
     return () => {
-      document.body.style.overflow = prev;
+      html.style.overflow = prev;
     };
   }, []);
 

@@ -1,4 +1,5 @@
 export { AppShell } from "./app-shell";
+export { OverlayScrollbarsInit } from "./overlay-scrollbars-init";
 export { NAV_ITEMS } from "./nav-items";
 export type { NavItem } from "./nav-items";
 // `getViewCounts` is server-only — import from "./counts" directly.

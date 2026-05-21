@@ -1,6 +1,6 @@
 import { ViewHeader, EmptyState } from "@/modules/shell";
 import { MobileFloatingActions } from "@/modules/shell/mobile-floating-actions";
-import { UploadButton } from "@/modules/ingestion";
+import { UploadButton, UploadDropTarget } from "@/modules/ingestion";
 import { TrashEmptyButton } from "@/modules/actions";
 import { SearchBar } from "@/modules/search";
 import { FolderHeaderActions } from "@/modules/folders/folder-header-actions";
@@ -95,8 +95,8 @@ export async function ViewPage({
     emptyBody = "Tag an image from the image details panel.";
   }
 
-  return (
-    <ManageProvider>
+  const pageContent = (
+    <>
       <div className="flex min-h-dvh flex-col">
         <ViewHeader
           title={title}
@@ -120,7 +120,7 @@ export async function ViewPage({
             {view === "trash" ? (
               <TrashEmptyButton disabled={items.length === 0} />
             ) : (
-              <UploadButton folderId={folder?.id} tagId={tag?.id} />
+              <UploadButton />
             )}
           </div>
         </div>
@@ -151,14 +151,28 @@ export async function ViewPage({
             variant="floating"
           />
         ) : (
-          <UploadButton
-            folderId={folder?.id}
-            tagId={tag?.id}
-            variant="floating"
-          />
+          <UploadButton variant="floating" />
         )}
       </MobileFloatingActions>
       <ManagePanel view={view} folderId={folder?.id} />
+    </>
+  );
+
+  return (
+    <ManageProvider>
+      {/* Trash never accepts uploads, so the drop-target host (which
+          also owns the dialog + page-level drag listeners) isn't
+          mounted there — keeps stray file drags from spinning up an
+          upload dialog on a view where the action makes no sense.
+          UploadButton isn't rendered in trash either, so it's safe to
+          skip the provider entirely. */}
+      {view !== "trash" ? (
+        <UploadDropTarget folderId={folder?.id} tagId={tag?.id}>
+          {pageContent}
+        </UploadDropTarget>
+      ) : (
+        pageContent
+      )}
     </ManageProvider>
   );
 }

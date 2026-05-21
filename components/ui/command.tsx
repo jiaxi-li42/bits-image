@@ -4,6 +4,7 @@ import * as React from "react"
 import { Command as CommandPrimitive } from "cmdk"
 
 import { cn } from "@/lib/utils"
+import { OverlayScrollArea } from "@/components/ui/overlay-scrollbars"
 import {
   Dialog,
   DialogContent,
@@ -94,17 +95,20 @@ function CommandInput({
 
 function CommandList({
   className,
+  children,
   ...props
 }: React.ComponentProps<typeof CommandPrimitive.List>) {
+  // cmdk's keyboard navigation works off React context, not direct DOM
+  // children, so wrapping items in the OS viewport doesn't break
+  // arrow-key selection.
   return (
     <CommandPrimitive.List
       data-slot="command-list"
-      className={cn(
-        "no-scrollbar max-h-72 scroll-py-1 overflow-x-hidden overflow-y-auto outline-none",
-        className
-      )}
+      className={cn("outline-none", className)}
       {...props}
-    />
+    >
+      <OverlayScrollArea className="max-h-72">{children}</OverlayScrollArea>
+    </CommandPrimitive.List>
   )
 }
 

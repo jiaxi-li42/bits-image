@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { cookies } from "next/headers";
 import "./globals.css";
-import { AppShell } from "@/modules/shell";
+import { AppShell, OverlayScrollbarsInit } from "@/modules/shell";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { IosInstallHint, PullToRefresh, RegisterSW } from "@/modules/pwa";
@@ -77,6 +77,7 @@ export default async function RootLayout({
           <Toaster />
           <IosInstallHint />
           {authed ? <PullToRefresh /> : null}
+          <OverlayScrollbarsInit />
           <RegisterSW />
         </TooltipProvider>
       </body>

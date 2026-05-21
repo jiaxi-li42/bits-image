@@ -7,6 +7,7 @@ import { z } from "zod";
 import { toast } from "sonner";
 import { Download, RotateCcw, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { OverlayScrollArea } from "@/components/ui/overlay-scrollbars";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -174,7 +175,7 @@ export function DetailEditor({
         ) : null}
       </header>
 
-      <div className="px-4 pt-4 pb-4 md:flex-1 md:overflow-y-auto md:pt-0 md:[scrollbar-width:none] md:[&::-webkit-scrollbar]:hidden">
+      <OverlayScrollArea className="px-4 pt-4 pb-4 md:flex-1 md:pt-0">
         {loading ? (
           <div className="space-y-8">
             <Skeleton className="h-9 w-full" />
@@ -238,7 +239,7 @@ export function DetailEditor({
             </div>
           </fieldset>
         )}
-      </div>
+      </OverlayScrollArea>
 
       <footer className="flex flex-col gap-2 border-t border-border/50 p-4 md:flex-row md:items-center">
         {isTrash ? (
