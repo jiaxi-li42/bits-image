@@ -100,6 +100,7 @@ export async function listImages({
       title: schema.images.title,
       createdAt: schema.images.createdAt,
       deletedAt: schema.images.deletedAt,
+      purgingAt: schema.images.purgingAt,
     })
     .from(schema.images)
     .where(where)
@@ -114,6 +115,7 @@ export async function listImages({
     width: r.width,
     height: r.height,
     title: r.title,
+    purgingAt: r.purgingAt?.getTime() ?? null,
     createdAt: r.createdAt instanceof Date ? r.createdAt.getTime() : (r.createdAt as number),
     deletedAt:
       r.deletedAt == null

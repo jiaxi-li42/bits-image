@@ -29,6 +29,13 @@
       "when": 1777170000000,
       "tag": "0003_ordinary_the_renegades",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1789340330180,
+      "tag": "0004_trash_and_folder_cascade",
+      "breakpoints": true
     }
   ]
 }

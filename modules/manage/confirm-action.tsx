@@ -26,7 +26,7 @@ type ConfirmActionProps = {
   confirmLabel: string;
   pendingLabel: string;
   successToast: (n: number) => string;
-  run: (ids: string[]) => Promise<{ count: number }>;
+  run: (ids: string[]) => Promise<{ count: number; failed?: number }>;
   variant?: "inline" | "floating";
   destructive?: boolean;
 };
@@ -61,6 +61,7 @@ export function ConfirmAction({
     startTransition(async () => {
       const res = await run(ids);
       toast(successToast(res.count));
+      if (res.failed) toast.error(`${res.failed} images could not be fully deleted. They remain in Trash for retry and cannot be restored.`);
       setOpen(false);
       clear();
     });

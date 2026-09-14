@@ -30,7 +30,7 @@ export async function GET(
 ) {
   const { id } = await params;
   const row = await db
-    .select({ hash: schema.images.hash, title: schema.images.title })
+    .select({ key: schema.images.r2Key, title: schema.images.title })
     .from(schema.images)
     .where(eq(schema.images.id, id))
     .get();
@@ -41,7 +41,7 @@ export async function GET(
     obj = await getR2().send(
       new GetObjectCommand({
         Bucket: getBucket(),
-        Key: `originals/${row.hash}`,
+        Key: row.key,
       }),
     );
   } catch (err) {

@@ -24,6 +24,7 @@ export function RestoreAction({
       toast(
         `${res.restored} ${res.restored === 1 ? "image" : "images"} restored`,
       );
+      if (res.restored < ids.length) toast.error("Some images could not be restored: expired, pending deletion, or no longer in Trash.");
       clear();
     });
   };

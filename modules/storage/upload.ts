@@ -1,7 +1,9 @@
 import { PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { randomUUID } from "node:crypto";
 import sharp from "sharp";
 import { getR2, getBucket } from "./client";
 import { dhash, sha256 } from "./hash";
+import { imageObjectKey } from "./keys";
 
 const THUMB_WIDTHS = { grid: 400, detail: 1200 } as const;
 
@@ -35,12 +37,6 @@ export async function uploadImage(buffer: Buffer): Promise<UploadedImage> {
   const hash = sha256(buffer);
   const image = sharp(buffer, { failOn: "error" });
   const meta = await image.metadata();
-  // Compute the perceptual hash from the original bytes (sharp will
-  // greyscale + downscale internally). Done in parallel with format
-  // validation below isn't needed — sharp.metadata() and dhash both have
-  // to decode anyway, but dhash runs in its own sharp pipeline so we
-  // start it now and await before the DB lookup.
-  const phashPromise = dhash(buffer);
   if (!meta.width || !meta.height) {
     throw new Error("Could not read image dimensions");
   }
@@ -50,40 +46,36 @@ export async function uploadImage(buffer: Buffer): Promise<UploadedImage> {
     );
   }
 
-  const key = `originals/${hash}`;
-
-  await r2.send(
-    new PutObjectCommand({
-      Bucket: bucket,
-      Key: key,
-      Body: buffer,
-      ContentType: `image/${meta.format}`,
-    }),
-  );
-
-  await Promise.all(
+  const phash = await dhash(buffer);
+  // Each attempt owns its objects: a losing DB insert can safely roll back
+  // without deleting another request's copy of the same image.
+  const key = `originals/${hash}/${randomUUID()}`;
+  const thumbs = await Promise.all(
     Object.entries(THUMB_WIDTHS).map(async ([name, width]) => {
       const thumb = await sharp(buffer)
         .resize({ width, withoutEnlargement: true })
         .webp({ quality: 82 })
         .toBuffer();
-      await r2.send(
-        new PutObjectCommand({
-          Bucket: bucket,
-          Key: `thumbs/${name}/${hash}.webp`,
-          Body: thumb,
-          ContentType: "image/webp",
-        }),
-      );
+      return { Key: imageObjectKey(key, name as "grid" | "detail"), Body: thumb, ContentType: "image/webp" };
     }),
   );
+  // Wait for ALL writes before cleanup, so a late PUT cannot recreate an orphan.
+  const writes = await Promise.allSettled(
+    [{ Key: key, Body: buffer, ContentType: `image/${meta.format}` }, ...thumbs]
+      .map((object) => r2.send(new PutObjectCommand({ Bucket: bucket, ...object }))),
+  );
+  const failed = writes.find((result) => result.status === "rejected");
+  if (failed?.status === "rejected") {
+    await deleteImageObjects(key).catch((error) => console.error("Upload cleanup failed", key, error));
+    throw failed.reason;
+  }
 
   return {
     key,
     width: meta.width,
     height: meta.height,
     hash,
-    phash: await phashPromise,
+    phash,
     byteSize: buffer.length,
   };
 }
@@ -92,10 +84,10 @@ export async function deleteObject(key: string): Promise<void> {
   await getR2().send(new DeleteObjectCommand({ Bucket: getBucket(), Key: key }));
 }
 
-export async function deleteAllForHash(hash: string): Promise<void> {
-  await Promise.all([
-    deleteObject(`originals/${hash}`),
-    deleteObject(`thumbs/grid/${hash}.webp`),
-    deleteObject(`thumbs/detail/${hash}.webp`),
-  ]);
+export async function deleteImageObjects(key: string): Promise<void> {
+  const results = await Promise.allSettled(
+    (["original", "grid", "detail"] as const).map((size) => deleteObject(imageObjectKey(key, size))),
+  );
+  const failed = results.find((result) => result.status === "rejected");
+  if (failed?.status === "rejected") throw failed.reason;
 }

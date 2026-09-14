@@ -136,14 +136,23 @@ export function DetailEditor({
 
   const onRestore = () => {
     startTransition(async () => {
-      await restoreImages([imageId]);
+      const { restored } = await restoreImages([imageId]);
+      if (!restored) {
+        toast.error("Cannot restore: the image has expired, is pending deletion, or is no longer in Trash.");
+        return;
+      }
       toast("Restored");
       onRemoved?.();
     });
   };
 
   const onHardDelete = async () => {
-    await hardDeleteImages([imageId]);
+    const { removed, failed } = await hardDeleteImages([imageId]);
+    if (failed) {
+      toast.error("Deletion incomplete. The image remains in Trash for retry and cannot be restored.");
+      return;
+    }
+    if (!removed) return;
     toast("Deleted permanently");
     onRemoved?.();
   };

@@ -9,6 +9,8 @@ import {
 // static assets and the unlock route itself; everything else requires a
 // matching auth cookie or gets redirected to /unlock.
 export function proxy(request: NextRequest) {
+  // This exact endpoint uses its own CRON_SECRET bearer authentication.
+  if (request.nextUrl.pathname === "/api/cron/purge-trash") return NextResponse.next();
   const expected = expectedAuthToken();
   // If APP_PASSCODE isn't configured at all, fail-open in development
   // (so localhost doesn't get stuck) and fail-closed in production

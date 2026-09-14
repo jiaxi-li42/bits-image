@@ -1,8 +1,8 @@
 "use server";
 
-import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db, schema } from "@/db/client";
-import { deleteAllForHash } from "@/modules/storage";
+import { purgeTrash, restoreTrashImages } from "./trash";
 import { revalidateAllViews } from "@/lib/revalidate";
 
 export async function softDeleteImages(
@@ -13,7 +13,7 @@ export async function softDeleteImages(
   await db
     .update(schema.images)
     .set({ deletedAt: new Date() })
-    .where(inArray(schema.images.id, ids));
+    .where(and(inArray(schema.images.id, ids), isNull(schema.images.deletedAt)));
   revalidateAllViews();
   return { removed: ids.length };
 }
@@ -21,45 +21,17 @@ export async function softDeleteImages(
 export async function restoreImages(
   imageIds: string[],
 ): Promise<{ restored: number }> {
-  const ids = imageIds.filter(Boolean);
-  if (ids.length === 0) return { restored: 0 };
-  await db
-    .update(schema.images)
-    .set({ deletedAt: null })
-    .where(inArray(schema.images.id, ids));
+  const result = await restoreTrashImages(imageIds.filter(Boolean));
   revalidateAllViews();
-  return { restored: ids.length };
+  return result;
 }
 
 export async function hardDeleteImages(
   imageIds: string[],
-): Promise<{ removed: number }> {
-  const ids = imageIds.filter(Boolean);
-  if (ids.length === 0) return { removed: 0 };
-  const rows = await db
-    .select({ id: schema.images.id, hash: schema.images.hash })
-    .from(schema.images)
-    .where(
-      and(inArray(schema.images.id, ids), isNotNull(schema.images.deletedAt)),
-    )
-    .all();
-  await Promise.all(
-    rows.map((r) =>
-      deleteAllForHash(r.hash).catch((err) => {
-        console.warn(`R2 cleanup failed for ${r.hash}:`, err);
-      }),
-    ),
-  );
-  if (rows.length > 0) {
-    await db.delete(schema.images).where(
-      inArray(
-        schema.images.id,
-        rows.map((r) => r.id),
-      ),
-    );
-  }
+): Promise<{ removed: number; failed: number }> {
+  const result = await purgeTrash({ ids: imageIds.filter(Boolean) });
   revalidateAllViews();
-  return { removed: rows.length };
+  return result;
 }
 
 export type TagStateForImages = {

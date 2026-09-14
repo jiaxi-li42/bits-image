@@ -271,22 +271,8 @@ export async function renameFolder(
 }
 
 export async function deleteFolder(id: string): Promise<void> {
-  // Migration 0003 added folders.parent_id via ALTER TABLE, which SQLite
-  // applies with FK action NO ACTION — the schema's ON DELETE CASCADE never
-  // took effect on disk. Cascade in app code: BFS down the tree, then delete
-  // every descendant before the target.
-  const all: string[] = [id];
-  let frontier: string[] = [id];
-  while (frontier.length > 0) {
-    const rows = await db
-      .select({ id: schema.folders.id })
-      .from(schema.folders)
-      .where(inArray(schema.folders.parentId, frontier))
-      .all();
-    frontier = rows.map((r) => r.id);
-    all.push(...frontier);
-  }
-  await db.delete(schema.folders).where(inArray(schema.folders.id, all));
+  // Migration 0004 aligns the on-disk cascade with the schema.
+  await db.delete(schema.folders).where(eq(schema.folders.id, id));
   revalidateAllViews();
 }
 

@@ -25,6 +25,7 @@ export const images = sqliteTable(
       .notNull()
       .default(sql`(unixepoch() * 1000)`),
     deletedAt: integer("deleted_at", { mode: "timestamp_ms" }),
+    purgingAt: integer("purging_at", { mode: "timestamp_ms" }),
   },
   (t) => [
     index("images_created_at_idx").on(t.createdAt),

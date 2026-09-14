@@ -34,7 +34,7 @@ export function HardDeleteAction({
       }
       run={async (ids) => {
         const res = await hardDeleteImages(ids);
-        return { count: res.removed };
+        return { count: res.removed, failed: res.failed };
       }}
     />
   );

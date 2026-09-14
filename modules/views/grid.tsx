@@ -12,7 +12,7 @@ import {
 import { MasonryPhotoAlbum, type Photo } from "react-photo-album";
 import "react-photo-album/masonry.css";
 import { loadMore } from "./actions";
-import { TRASH_RETENTION_MS } from "./types";
+import { trashDaysLeft } from "@/modules/manage/retention";
 import type { GridImage, TagFilterMode, ViewKind } from "./types";
 import { Viewer } from "@/modules/viewer";
 import {
@@ -36,6 +36,7 @@ type GridPhoto = Photo & {
   id: string;
   hash: string;
   deletedAt: number | null;
+  purgingAt: number | null;
 };
 
 function toPhoto(i: GridImage): GridPhoto {
@@ -43,16 +44,12 @@ function toPhoto(i: GridImage): GridPhoto {
     id: i.id,
     hash: i.hash,
     deletedAt: i.deletedAt,
+    purgingAt: i.purgingAt,
     src: `/api/img/grid/${i.hash}`,
     width: i.width,
     height: i.height,
     alt: i.title ?? "",
   };
-}
-
-function daysLeft(deletedAt: number): number {
-  const ms = deletedAt + TRASH_RETENTION_MS - Date.now();
-  return Math.max(0, Math.ceil(ms / (24 * 60 * 60 * 1000)));
 }
 
 export function Grid({
@@ -77,13 +74,9 @@ export function Grid({
   const isManaging = useIsManaging();
   const manageActions = useManageActions();
 
-  // Sync server state into local state ONLY when the server actually
-  // delivered a different page. The previous version diffed by reference,
-  // which fired on every parent re-render — wiping optimistic deletes
-  // the viewer had just applied. Signature is "first-id:length:cursor".
-  const serverSig = `${initialItems[0]?.id ?? ""}:${initialItems.length}:${
-    initialCursor ?? ""
-  }`;
+  // Compare content, not object identity. A pending deletion can change a
+  // row without changing the page's first ID, length or cursor.
+  const serverSig = JSON.stringify([initialItems, initialCursor]);
   const lastSyncedSigRef = useRef(serverSig);
   useEffect(() => {
     if (lastSyncedSigRef.current === serverSig) return;
@@ -288,8 +281,8 @@ function PhotoCard({
       {view === "trash" && photo?.deletedAt != null ? (
         <span className="pointer-events-none absolute top-2 left-2 rounded-md bg-background/80 px-1.5 py-0.5 text-xs font-medium text-foreground shadow-xs">
           {(() => {
-            const d = daysLeft(photo.deletedAt);
-            return d === 1 ? "1 day left" : `${d} days left`;
+            const d = trashDaysLeft(photo.deletedAt);
+            return photo.purgingAt !== null ? "Deletion pending" : d === 0 ? "Expired" : d === 1 ? "1 day left" : `${d} days left`;
           })()}
         </span>
       ) : null}

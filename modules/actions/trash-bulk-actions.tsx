@@ -32,9 +32,10 @@ export function TrashEmptyButton({
 
   const onConfirm = () => {
     startTransition(async () => {
-      const { removed } = await emptyTrash();
+      const { removed, failed } = await emptyTrash();
       setOpen(false);
-      toast(removed > 0 ? `${removed} image${removed === 1 ? "" : "s"} deleted` : "Trash already empty");
+      if (failed) toast.error(`${removed} deleted; ${failed} remain in Trash for retry and cannot be restored.`);
+      else toast(removed > 0 ? `${removed} image${removed === 1 ? "" : "s"} deleted` : "Trash already empty");
       router.refresh();
     });
   };

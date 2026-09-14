@@ -1,4 +1,4 @@
-export { uploadImage, deleteObject, deleteAllForHash } from "./upload";
+export { uploadImage, deleteObject, deleteImageObjects } from "./upload";
 export type { UploadedImage } from "./upload";
 export { getSignedImageUrl } from "./urls";
 export type { ThumbSize } from "./urls";
