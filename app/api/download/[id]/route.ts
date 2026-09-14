@@ -62,12 +62,15 @@ export async function GET(
   const filename = `${safeTitle}.${ext}`;
   // RFC 5987 `filename*` carries the UTF-8 name; the ASCII `filename` is
   // the legacy fallback — together they cover non-Latin titles too.
-  const encoded = encodeURIComponent(filename);
+  const asciiFilename = filename.replace(/[^\x20-\x7e]/g, "_");
+  const encoded = encodeURIComponent(filename).replace(
+    /['()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
 
   return new Response(obj.Body.transformToWebStream(), {
     headers: {
       "Content-Type": contentType,
-      "Content-Disposition": `attachment; filename="${filename}"; filename*=UTF-8''${encoded}`,
+      "Content-Disposition": `attachment; filename="${asciiFilename}"; filename*=UTF-8''${encoded}`,
       ...(obj.ContentLength
         ? { "Content-Length": obj.ContentLength.toString() }
         : {}),

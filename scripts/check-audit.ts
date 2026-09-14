@@ -178,8 +178,8 @@ async function main() {
     const legacyHash = "f".repeat(64);
     const legacyKey = `originals/${legacyHash}`;
     await client.execute({
-      sql: "INSERT INTO images(id,r2_key,width,height,hash,title) VALUES ('legacy-route',?,32,32,?,'Legacy')",
-      args: [legacyKey, legacyHash],
+      sql: "INSERT INTO images(id,r2_key,width,height,hash,title) VALUES ('legacy-route',?,32,32,?,?)",
+      args: [legacyKey, legacyHash, "\u6d77\u666f '()"],
     });
     for (const size of ["original", "grid", "detail"] as const) objects.set(imageObjectKey(legacyKey, size), png);
     for (const [id, hash, key] of [[String(row.id), String(row.hash), String(row.r2_key)], ["legacy-route", legacyHash, legacyKey]]) {
@@ -190,6 +190,10 @@ async function main() {
       }
       const download = await downloadRoute(new Request("http://localhost"), { params: Promise.resolve({ id }) });
       assert.equal(download.status, 200);
+      if (id === "legacy-route") {
+        assert.equal(download.headers.get("content-disposition"),
+          "attachment; filename=\"__ '().png\"; filename*=UTF-8''%E6%B5%B7%E6%99%AF%20%27%28%29.png");
+      }
       assert.deepEqual(Buffer.from(await download.arrayBuffer()), png);
     }
     await client.execute("DELETE FROM images WHERE id='legacy-route'");
