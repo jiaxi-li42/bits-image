@@ -76,18 +76,21 @@ async function main() {
     const { imageObjectKey } = await import("../modules/storage/keys");
     const { sha256 } = await import("../modules/storage/hash");
     const objects = new Map<string, Buffer>();
+    const contentTypes = new Map<string, string>();
     let failPut = false;
     let failDelete = false;
     let onDelete: (() => Promise<void>) | undefined;
-    mock.method(getR2(), "send", async (command: { constructor: { name: string }; input: { Key: string; Body: Buffer } }) => {
+    mock.method(getR2(), "send", async (command: { constructor: { name: string }; input: { Key: string; Body: Buffer; ContentType: string } }) => {
       const { Key, Body } = command.input;
       if (command.constructor.name === "PutObjectCommand") {
         if (failPut && Key.startsWith("thumbs/grid/")) throw new Error("Injected PUT failure");
         objects.set(Key, Body);
+        contentTypes.set(Key, command.input.ContentType);
       } else if (command.constructor.name === "DeleteObjectCommand") {
         await onDelete?.();
         if (failDelete && Key.startsWith("originals/")) throw new Error("Injected DELETE failure");
         objects.delete(Key);
+        contentTypes.delete(Key);
       } else if (command.constructor.name === "GetObjectCommand") {
         const data = objects.get(Key);
         if (!data) throw new Error("Object not found");
@@ -102,6 +105,28 @@ async function main() {
     const { ingestFile } = await import("../modules/ingestion/server");
     // Deterministic texture gives nontrivial dHash and reproducible re-encodes.
     const pixels = Buffer.from(Array.from({ length: 32 * 32 * 3 }, (_, i) => (i * 73 + Math.floor(i / 96) * 17) % 256));
+    const { uploadImage, deleteImageObjects } = await import("../modules/storage/upload");
+    for (const format of ["jpeg", "png", "webp", "gif", "avif"] as const) {
+      const sample = await sharp(pixels, { raw: { width: 32, height: 32, channels: 3 } }).toFormat(format).toBuffer();
+      const uploaded = await uploadImage(sample);
+      assert.equal(uploaded.width, 32);
+      assert.equal(uploaded.height, 32);
+      assert.match(uploaded.phash, /^[0-9a-f]{16}$/);
+      assert.equal(contentTypes.get(uploaded.key), `image/${format}`);
+      assert.deepEqual(objects.get(uploaded.key), sample);
+      for (const size of ["grid", "detail"] as const) {
+        const thumb = await sharp(objects.get(imageObjectKey(uploaded.key, size))!).metadata();
+        assert.equal(thumb.format, "webp");
+        assert.equal(thumb.width, 32);
+      }
+      await deleteImageObjects(uploaded.key);
+    }
+    const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10"/></svg>');
+    await assert.rejects(uploadImage(svg), /Unsupported image format/);
+    const tiff = await sharp(pixels, { raw: { width: 32, height: 32, channels: 3 } }).tiff().toBuffer();
+    await assert.rejects(uploadImage(tiff), /Unsupported image format/);
+    assert.equal(objects.size, 0);
+    console.log(`PASS: JPEG/PNG/WebP/GIF/AVIF uploads, MIME types, thumbnails; SVG/TIFF rejection (sharp ${sharp.versions.sharp}, libvips ${sharp.versions.vips}, libheif ${sharp.versions.heif})`);
     const png = await sharp(pixels, { raw: { width: 32, height: 32, channels: 3 } }).png().toBuffer();
     const form = new FormData();
     form.set("file", new File([new Uint8Array(png)], "texture.png", { type: "image/png" }));

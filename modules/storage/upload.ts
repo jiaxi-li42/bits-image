@@ -37,10 +37,12 @@ export async function uploadImage(buffer: Buffer): Promise<UploadedImage> {
   const hash = sha256(buffer);
   const image = sharp(buffer, { failOn: "error" });
   const meta = await image.metadata();
+  // sharp reports AVIF through its HEIF decoder; HEIC remains unsupported.
+  const format = meta.format === "heif" && meta.compression === "av1" ? "avif" : meta.format;
   if (!meta.width || !meta.height) {
     throw new Error("Could not read image dimensions");
   }
-  if (!meta.format || !ALLOWED_FORMATS.has(meta.format)) {
+  if (!format || !ALLOWED_FORMATS.has(format)) {
     throw new Error(
       `Unsupported image format${meta.format ? `: ${meta.format}` : ""}. Allowed: JPEG, PNG, WebP, GIF, AVIF.`,
     );
@@ -61,7 +63,7 @@ export async function uploadImage(buffer: Buffer): Promise<UploadedImage> {
   );
   // Wait for ALL writes before cleanup, so a late PUT cannot recreate an orphan.
   const writes = await Promise.allSettled(
-    [{ Key: key, Body: buffer, ContentType: `image/${meta.format}` }, ...thumbs]
+    [{ Key: key, Body: buffer, ContentType: `image/${format}` }, ...thumbs]
       .map((object) => r2.send(new PutObjectCommand({ Bucket: bucket, ...object }))),
   );
   const failed = writes.find((result) => result.status === "rejected");

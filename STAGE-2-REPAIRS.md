@@ -6,7 +6,7 @@ Updated: 2026-09-14.
 
 Implement S2-01 through S2-06 in order. Browser uploads must support 50 MiB through direct uploads to private R2 (S2-03). Standardize on Node 24 (S2-06). Keep project content in English. Pause before the next issue if remaining Codex usage is insufficient, then resume after reset. Do not start stage 3 before user acceptance. S2-07 is outside this repair authorization.
 
-## S2-01: implemented and locally verified; deployment pending
+## S2-01: completed and deployed
 
 - Updated Next.js and eslint-config-next from 16.2.4 to 16.3.5 together.
 - Updated React and React DOM from 19.2.4 to 19.2.8, staying on the existing minor line.
@@ -17,11 +17,18 @@ Validation: production build, TypeScript, existing isolated ingestion/trash/migr
 
 The updated framework normalizes authenticated RSC requests to include `_rsc`. The test uses that canonical request form. The framework also now ignores the unrelated parent-directory lockfile by default, with a warning; no S2-07 configuration change was made.
 
-These changes have not been pushed or deployed yet. Resume by checking the local commit and deploying/verifying S2-01 before starting S2-02.
+Commit `cfbfecd` was pushed to master. Vercel marked its production deployment Ready on 2026-09-14. Production smoke checks passed: anonymous access redirects to unlock, anonymous cron access returns 401, authenticated gallery rendering succeeds, and an existing thumbnail and original download return 200. These checks were read-only.
+
+## S2-02: implemented and locally verified; deployment verification pending
+
+- Updated the direct sharp dependency to 0.35.4; the application and Next.js now resolve the patched release.
+- Fixed AVIF rejection by recognizing the HEIF decoder's AV1 compression and storing `image/avif`; HEIC is not added to the allowed formats.
+- Extended isolated checks to upload JPEG, PNG, WebP, GIF and AVIF, verify original bytes/MIME types and both WebP thumbnails, and reject SVG/TIFF.
+- Windows reports libvips 8.18.6 and libheif 1.23.2. All five pre-upgrade sample files produce unchanged dHash values. The full isolated audit checks, changed-file ESLint and production build passed.
+- The build command now runs the isolated audit checks before Next.js, so native decoding is also verified in the actual Linux build environment. S2-05 will complete the remaining lint/type/build gate.
 
 ## Remaining sequence
 
-1. S2-02: update direct sharp to 0.35.4; verify native libraries and representative JPEG/PNG/WebP/GIF/AVIF inputs, thumbnails and dHash. Next.js now pulls its own sharp 0.35.4, but the application's direct dependency remains 0.34.5 until this step. Check AVIF metadata naming (`heif` with AV1 compression) against the existing format allow-list rather than assuming the advertised AVIF path works.
 2. S2-03: implement authenticated direct-to-private-R2 uploads up to 50 MiB, followed by server-side validation and finalization; preserve deduplication, folder/tag assignment and failure cleanup. Verify expiry, ownership, size/content validation and bucket CORS without making the bucket public.
 3. S2-04: update relevant compatible/transitive packages, move shadcn to devDependencies while preserving its CSS import, remove unused better-sqlite3 types, and document residual audit findings. Avoid forced migration-tool overrides.
 4. S2-05: fix source lint issues and enforce lint, types, isolated checks and build before production promotion.
