@@ -98,11 +98,13 @@ async function main() {
           ContentType: "image/png", ContentLength: data.length,
           Body: { transformToWebStream: () => new ReadableStream({ start(controller) { controller.enqueue(data); controller.close(); } }) },
         };
+      } else if (command.constructor.name === "ListObjectsV2Command") {
+        return { Contents: [...objects.keys()].filter((Key) => Key.startsWith("uploads/")).sort().map((Key) => ({ Key })) };
       } else throw new Error("Unexpected network command in isolated test");
       return {};
     });
     const { ingestImage, MAX_UPLOAD_BYTES } = await import("../modules/ingestion/ingest");
-    const { ingestFile } = await import("../modules/ingestion/server");
+    const { prepareUpload, finalizeUpload, purgeExpiredUploads } = await import("../modules/ingestion/direct-upload");
     // Deterministic texture gives nontrivial dHash and reproducible re-encodes.
     const pixels = Buffer.from(Array.from({ length: 32 * 32 * 3 }, (_, i) => (i * 73 + Math.floor(i / 96) * 17) % 256));
     const { uploadImage, deleteImageObjects } = await import("../modules/storage/upload");
@@ -128,10 +130,54 @@ async function main() {
     assert.equal(objects.size, 0);
     console.log(`PASS: JPEG/PNG/WebP/GIF/AVIF uploads, MIME types, thumbnails; SVG/TIFF rejection (sharp ${sharp.versions.sharp}, libvips ${sharp.versions.vips}, libheif ${sharp.versions.heif})`);
     const png = await sharp(pixels, { raw: { width: 32, height: 32, channels: 3 } }).png().toBuffer();
-    const form = new FormData();
-    form.set("file", new File([new Uint8Array(png)], "texture.png", { type: "image/png" }));
-    const imported = await ingestFile(form);
-    assert.equal(imported.status, "ok");
+    await client.batch([
+      "INSERT INTO folders(id,name) VALUES ('upload-folder','Upload folder')",
+      "INSERT INTO tags(id,name) VALUES ('upload-tag','upload-tag')",
+    ], "write");
+    const details = { filename: "texture.png", size: png.length, hash: sha256(png), folderId: "upload-folder", tagId: "upload-tag" };
+    const grant = await prepareUpload(details, "test-owner");
+    assert(grant.ticket && grant.url);
+    const temporaryKey = new URL(grant.url).pathname.slice(1);
+    assert(temporaryKey.startsWith("uploads/"));
+    assert.equal(new URL(grant.url).searchParams.get("X-Amz-Expires"), "900");
+    assert.match(new URL(grant.url).searchParams.get("X-Amz-SignedHeaders")!, /content-length/);
+    assert(!Buffer.from(grant.ticket.split(".")[0], "base64url").toString().includes('"test-owner"'));
+    objects.set(temporaryKey, png);
+    await assert.rejects(finalizeUpload(grant.ticket, "wrong-owner"), /different session/);
+    await assert.rejects(finalizeUpload(grant.ticket + "x", "test-owner"), /Invalid upload ticket/);
+    const realNow = Date.now;
+    const clock = mock.method(Date, "now", () => realNow() + 16 * 60 * 1000);
+    await assert.rejects(finalizeUpload(grant.ticket, "test-owner"), /expired/);
+    clock.mock.restore();
+    assert(objects.has(temporaryKey), "Invalid tickets must never delete an object");
+    const completed = await Promise.all([finalizeUpload(grant.ticket, "test-owner"), finalizeUpload(grant.ticket, "test-owner")]);
+    assert.equal(completed.filter((result) => result.status === "ok").length, 1);
+    assert.equal(completed.filter((result) => result.status === "duplicate").length, 1);
+    assert.equal((await client.execute("SELECT * FROM image_folders WHERE folder_id='upload-folder'")).rows.length, 1);
+    assert.equal((await client.execute("SELECT * FROM image_tags WHERE tag_id='upload-tag'")).rows.length, 1);
+    assert(!objects.has(temporaryKey));
+    assert.equal((await prepareUpload(details, "test-owner")).status, "duplicate");
+    const wrongSize = await prepareUpload({ ...details, hash: "d".repeat(64), size: png.length + 1 }, "test-owner");
+    assert(wrongSize.ticket && wrongSize.url);
+    objects.set(new URL(wrongSize.url).pathname.slice(1), png);
+    await assert.rejects(finalizeUpload(wrongSize.ticket, "test-owner"), /size does not match/);
+    assert(!objects.has(new URL(wrongSize.url).pathname.slice(1)));
+    await assert.rejects(prepareUpload({ ...details, size: MAX_UPLOAD_BYTES + 1 }, "test-owner"));
+    await assert.rejects(prepareUpload({ ...details, size: 0 }, "test-owner"));
+    const bad = await prepareUpload({ ...details, hash: "e".repeat(64) }, "test-owner");
+    assert(bad.ticket && bad.url);
+    objects.set(new URL(bad.url).pathname.slice(1), png);
+    await assert.rejects(finalizeUpload(bad.ticket, "test-owner"), /checksum/);
+    assert(!objects.has(new URL(bad.url).pathname.slice(1)));
+    const oldKey = `uploads/${Date.now() - 25 * 60 * 60 * 1000}/00000000-0000-4000-8000-000000000000`;
+    objects.set(oldKey, png);
+    const freshKey = `uploads/${Date.now()}/00000000-0000-4000-8000-000000000000`;
+    objects.set(freshKey, png);
+    assert.deepEqual(await purgeExpiredUploads(), { uploadsRemoved: 1, uploadsFailed: 0 });
+    assert(!objects.has(oldKey));
+    assert(objects.has(freshKey));
+    objects.delete(freshKey);
+    console.log("PASS: direct upload expiry, session binding, tampering, signed limits, checksum verification, duplicate preflight, temporary cleanup");
     const row = (await client.execute("SELECT * FROM images")).rows[0];
     assert.equal(row.title, "texture");
     assert.equal(String(row.phash).length, 16);

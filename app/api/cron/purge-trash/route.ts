@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { purgeTrash } from "@/modules/manage/trash";
 import { revalidateAllViews } from "@/lib/revalidate";
+import { purgeExpiredUploads } from "@/modules/ingestion/direct-upload";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -16,9 +17,9 @@ export async function GET(request: Request) {
   }
   try {
     // ponytail: at most 50 images per invocation; schedule more often if a backlog builds up.
-    const result = await purgeTrash({ expiredOnly: true, limit: 50 });
+    const result = { ...await purgeTrash({ expiredOnly: true, limit: 50 }), ...await purgeExpiredUploads() };
     revalidateAllViews();
-    return Response.json(result, { status: result.failed ? 503 : 200, headers });
+    return Response.json(result, { status: result.failed || result.uploadsFailed ? 503 : 200, headers });
   } catch (error) {
     console.error("Scheduled trash cleanup failed", error);
     return Response.json({ error: "Cleanup failed; retry later" }, { status: 503, headers });

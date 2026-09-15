@@ -1,23 +1,17 @@
-"use server";
+import "server-only";
 
 import { inArray } from "drizzle-orm";
 import { db, schema } from "@/db/client";
 import { addImageToFolder } from "@/modules/folders";
 import { assignTag } from "@/modules/tags";
 import { revalidateAllViews } from "@/lib/revalidate";
-import { ingestImage, MAX_UPLOAD_BYTES, type IngestResult } from "./ingest";
+import type { IngestResult } from "./ingest";
 
 export type { IngestResult } from "./ingest";
 
-export async function ingestFile(formData: FormData): Promise<IngestResult> {
-  const file = formData.get("file");
-  if (!(file instanceof File)) return { status: "error", message: "No file provided" };
-  if (file.size > MAX_UPLOAD_BYTES) return { status: "error", message: "File exceeds 50 MB limit" };
-  const result = await ingestImage(Buffer.from(await file.arrayBuffer()), file.name);
+export async function classifyImport(result: IngestResult, folderId?: string, tagId?: string): Promise<IngestResult> {
   if (result.status === "error") return result;
   const id = result.status === "ok" ? result.imageId : result.existingId;
-  const folderId = formData.get("folderId");
-  const tagId = formData.get("tagId");
   try {
     if (typeof folderId === "string" && folderId) await addImageToFolder(id, folderId);
     if (typeof tagId === "string" && tagId) await assignTag(id, tagId);

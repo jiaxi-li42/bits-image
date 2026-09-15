@@ -1,12 +1,6 @@
 import type { NextConfig } from "next";
 
-const nextConfig: NextConfig = {
-  experimental: {
-    serverActions: {
-      // 50 MiB file cap plus multipart/Server Action envelope overhead.
-      bodySizeLimit: "51mb",
-    },
-  },
-};
+// File bytes travel directly to R2; Server Actions keep the default body limit.
+const nextConfig: NextConfig = {};
 
 export default nextConfig;

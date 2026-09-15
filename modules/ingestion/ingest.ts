@@ -4,7 +4,8 @@ import { db, schema } from "@/db/client";
 import { uploadImage, deleteImageObjects } from "@/modules/storage/upload";
 import { hammingDistance, sha256 } from "@/modules/storage/hash";
 
-export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+import { MAX_UPLOAD_BYTES } from "./limits";
+export { MAX_UPLOAD_BYTES } from "./limits";
 export type IngestResult =
   | { status: "ok"; imageId: string }
   | { status: "duplicate"; existingId: string }
@@ -13,7 +14,7 @@ export type IngestResult =
 // Shared by the web action and CLI; no Next request/cache dependencies.
 export async function ingestImage(buffer: Buffer, filename: string): Promise<IngestResult> {
   if (!buffer.length) return { status: "error", message: "File is empty" };
-  if (buffer.length > MAX_UPLOAD_BYTES) return { status: "error", message: "File exceeds 50 MB limit" };
+  if (buffer.length > MAX_UPLOAD_BYTES) return { status: "error", message: "File exceeds 50 MiB limit" };
   let uploaded: Awaited<ReturnType<typeof uploadImage>> | undefined;
   let inserted = false;
   try {

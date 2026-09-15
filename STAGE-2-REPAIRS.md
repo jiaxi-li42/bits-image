@@ -1,6 +1,6 @@
 # Stage 2 repair progress
 
-Updated: 2026-09-14.
+Updated: 2026-09-15.
 
 ## Authorized scope
 
@@ -19,13 +19,27 @@ The updated framework normalizes authenticated RSC requests to include `_rsc`. T
 
 Commit `cfbfecd` was pushed to master. Vercel marked its production deployment Ready on 2026-09-14. Production smoke checks passed: anonymous access redirects to unlock, anonymous cron access returns 401, authenticated gallery rendering succeeds, and an existing thumbnail and original download return 200. These checks were read-only.
 
-## S2-02: implemented and locally verified; deployment verification pending
+## S2-02: completed and deployed
 
 - Updated the direct sharp dependency to 0.35.4; the application and Next.js now resolve the patched release.
 - Fixed AVIF rejection by recognizing the HEIF decoder's AV1 compression and storing `image/avif`; HEIC is not added to the allowed formats.
 - Extended isolated checks to upload JPEG, PNG, WebP, GIF and AVIF, verify original bytes/MIME types and both WebP thumbnails, and reject SVG/TIFF.
 - Windows reports libvips 8.18.6 and libheif 1.23.2. All five pre-upgrade sample files produce unchanged dHash values. The full isolated audit checks, changed-file ESLint and production build passed.
 - The build command now runs the isolated audit checks before Next.js, so native decoding is also verified in the actual Linux build environment. S2-05 will complete the remaining lint/type/build gate.
+
+Commit `9b6c558` is deployed and Ready. Its Linux build ran the isolated checks successfully, and production read-only gallery/thumbnail/download smoke checks passed.
+
+## S2-03: implemented and locally verified; production validation pending
+
+Working-tree changes implement authenticated `/api/uploads` preparation/finalization, 15-minute signed tickets bound to a hash of the current session, signed PUT length/checksum/content type/conditional creation, bounded server-side reads and SHA verification, existing ingestion/classification reuse, serial browser hashing/uploads, and daily cleanup of abandoned `uploads/` objects older than 24 hours (up to 50 per run). The obsolete full-file Server Action and 51 MB action override are removed.
+
+The production R2 bucket now has a CORS rule for `https://bits-image.vercel.app`, PUT only, headers `content-type`, `x-amz-checksum-sha256`, `if-none-match`, max age 3600. The bucket previously had no CORS policy. The user logged into Cloudflare; after verifying the production domain and absence of an existing policy, saving succeeded. The S3 credentials cannot read/write bucket configuration; use the logged-in Cloudflare dashboard for settings. A small synthetic signed PUT with length, checksum and If-None-Match was accepted by R2 and immediately deleted.
+
+Isolation checks passed for five image formats, ticket tampering/expiry/session ownership, size/checksum rejection, concurrent finalization, folder/tag assignment, duplicate preflight and temporary cleanup. Build, TypeScript, changed-file ESLint and the production-server authentication/Origin/metadata-size/50 MiB-boundary checks passed. Next.js normalizes loopback hostnames in nextUrl; the Origin comparison retains the actual HTTP Host. Failed browser entries can be retried without selecting files again. README/SETUP document the upload flow, CORS and cleanup.
+
+Remaining S2-03 work: verify deployment, perform an actual 50 MiB browser upload, confirm duplicate handling and cleanup of its uniquely identified synthetic data. The ignored `backups/s2-03-fixture.json` records the generated 52,428,800-byte PNG's name and SHA-256. Do not mark S2-03 complete or begin S2-04 before this verification.
+
+Quota checkpoint: 2026-09-14 evening, 4% remained. Next reported reset is 2026-09-15 01:20:17 UTC (02:20:17 Europe/London). Current shell validation session was 34727. The previous lint/audit session 13815 completed the audit successfully but reported test type narrowing errors that were subsequently fixed. Session 80216 had the pre-fix Origin assertion failure. Browser tab 5 is the authenticated Cloudflare bucket settings page; tab 4 is Vercel. Recheck actual state on resume.
 
 ## Remaining sequence
 

@@ -31,7 +31,8 @@ import {
 } from "@/components/ui/tooltip";
 import { FLOATING_BUTTON_CLASS } from "@/modules/shell/mobile-floating-actions";
 import { cn } from "@/lib/utils";
-import { checkExistingHashes, ingestFile } from "./server";
+import { uploadDirect } from "./upload-client";
+import { useRouter } from "next/navigation";
 
 // Single source of truth for what counts as an uploadable image. Used by
 // the in-dialog react-dropzone (which needs the MIME→extension map) and
@@ -47,24 +48,6 @@ const ACCEPTED_MIME_TYPES = new Set(Object.keys(ACCEPT_MAP));
 
 function filterImageFiles(files: FileList | File[]): File[] {
   return Array.from(files).filter((f) => ACCEPTED_MIME_TYPES.has(f.type));
-}
-
-/**
- * Compute the SHA-256 of a File using the Web Crypto API. Used as a
- * pre-flight before uploading bytes — if the hash is already in the DB
- * we can skip the upload entirely. Mirrors the server's `sha256(buffer)`
- * (both are byte-level SHA-256 → 64-char hex), so a client hit is also
- * guaranteed to be a server hit.
- */
-async function sha256Hex(file: File): Promise<string> {
-  const buf = await file.arrayBuffer();
-  const digest = await crypto.subtle.digest("SHA-256", buf);
-  const bytes = new Uint8Array(digest);
-  let out = "";
-  for (let i = 0; i < bytes.length; i++) {
-    out += bytes[i].toString(16).padStart(2, "0");
-  }
-  return out;
 }
 
 /**
@@ -113,6 +96,7 @@ type FileStatus =
   | "queued"
   | "hashing"
   | "uploading"
+  | "processing"
   | "ok"
   | "duplicate"
   | "error";
@@ -152,6 +136,7 @@ function UploadDropzone({
     })),
   );
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   const addFiles = useCallback((files: File[]) => {
     const added: Entry[] = files.map((f) => ({
@@ -208,78 +193,19 @@ function UploadDropzone({
   });
 
   const start = () => {
-    const queued = entries.filter((e) => e.status === "queued");
+    const queued = entries.filter((e) => e.status === "queued" || e.status === "error");
     if (queued.length === 0) return;
     startTransition(async () => {
       let okCount = 0;
       let dupCount = 0;
       let errCount = 0;
 
-      // Phase 1 — hash all queued files locally in parallel. Web Crypto's
-      // SHA-256 is byte-identical to the server's `sha256(buffer)`, so a
-      // hash that's already in the DB is guaranteed to match.
-      setEntries((prev) =>
-        prev.map((e) =>
-          e.status === "queued" && queued.some((q) => q.id === e.id)
-            ? { ...e, status: "hashing" }
-            : e,
-        ),
-      );
-      const hashed: { entry: Entry; hash: string | null }[] = await Promise.all(
-        queued.map(async (entry) => {
-          try {
-            return { entry, hash: await sha256Hex(entry.file) };
-          } catch {
-            // If hashing fails (e.g. unreadable file), fall through to the
-            // server, which will surface a proper error.
-            return { entry, hash: null };
-          }
-        }),
-      );
-
-      // Phase 2 — single round-trip to ask the server which of those
-      // hashes are already on disk. Folder/tag are passed through so the
-      // server can attach existing rows in the same call (otherwise
-      // skipping the upload would silently drop those associations).
-      let existing: Record<string, string> = {};
-      try {
-        existing = await checkExistingHashes(
-          hashed.map((h) => h.hash).filter((h): h is string => !!h),
-          folderId,
-          tagId,
-        );
-      } catch {
-        // Server unreachable — fall back to per-file `ingestFile`, which
-        // still does the SHA dedup itself. Slower but correct.
-      }
-
-      // Phase 3 — for each file, either short-circuit as duplicate or
-      // upload through the existing path (which still catches perceptual
-      // dupes on the server).
-      for (const { entry, hash } of hashed) {
-        if (hash && existing[hash]) {
-          dupCount++;
-          setEntries((prev) =>
-            prev.map((e) =>
-              e.id === entry.id
-                ? { ...e, status: "duplicate", message: "Already in library" }
-                : e,
-            ),
-          );
-          continue;
-        }
-
-        setEntries((prev) =>
-          prev.map((e) =>
-            e.id === entry.id ? { ...e, status: "uploading" } : e,
-          ),
-        );
-        const fd = new FormData();
-        fd.append("file", entry.file);
-        if (folderId) fd.append("folderId", folderId);
-        if (tagId) fd.append("tagId", tagId);
+      // Process one file at a time so a batch of 50 MiB files cannot fill memory.
+      for (const entry of queued) {
         try {
-          const res = await ingestFile(fd);
+          const res = await uploadDirect(entry.file, folderId, tagId, (status) => {
+            setEntries((prev) => prev.map((e) => e.id === entry.id ? { ...e, status } : e));
+          });
           if (res.status === "ok") {
             okCount++;
             setEntries((prev) =>
@@ -320,6 +246,7 @@ function UploadDropzone({
         }
       }
 
+      router.refresh();
       const parts: string[] = [];
       if (okCount) parts.push(`${okCount} uploaded`);
       if (dupCount) parts.push(`${dupCount} duplicate`);
@@ -351,7 +278,7 @@ function UploadDropzone({
             : "Drag images anywhere, or click to choose"}
         </p>
         <p className="text-sm text-muted-foreground">
-          JPG, PNG, WebP, AVIF (max 50MB)
+          JPG, PNG, WebP, AVIF (max 50 MiB)
         </p>
       </div>
 
@@ -399,6 +326,7 @@ function UploadDropzone({
                     e.status === "ok" && "text-emerald-600",
                     e.status === "duplicate" && "text-amber-600",
                     (e.status === "uploading" ||
+                      e.status === "processing" ||
                       e.status === "hashing" ||
                       e.status === "queued") &&
                       "text-muted-foreground",
@@ -407,6 +335,7 @@ function UploadDropzone({
                   {e.status === "queued" && "queued"}
                   {e.status === "hashing" && "checking…"}
                   {e.status === "uploading" && "uploading…"}
+                  {e.status === "processing" && "processing…"}
                   {e.status === "ok" && "uploaded"}
                   {e.status === "duplicate" && "duplicate"}
                 </span>
@@ -421,9 +350,9 @@ function UploadDropzone({
         <Button
           type="button"
           onClick={start}
-          disabled={pending || entries.every((e) => e.status !== "queued")}
+          disabled={pending || entries.every((e) => e.status !== "queued" && e.status !== "error")}
         >
-          {pending ? "Uploading…" : "Upload"}
+          {pending ? "Uploading…" : entries.some((e) => e.status === "error") ? "Upload / retry" : "Upload"}
         </Button>
       </div>
     </div>

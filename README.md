@@ -13,7 +13,7 @@ A shared cloud image library for individuals and studios: upload, organise, sear
 - PWA installation, pull-to-refresh, and an offline unlock page; no offline gallery.
 - Clipboard, remote URL, system share-target ingestion, and AI classification are not implemented. Source URL is metadata only.
 - The web uploader accepts JPEG, PNG, WebP, and AVIF. Storage processing also accepts GIF; complete animation support is outside this repair.
-- The application file limit is 50 MiB. Hosting request-size and execution limits may be lower; verify the required sizes on the deployed environment.
+- Browser and CLI uploads support files up to 50 MiB. Browser file bytes go directly to private R2; Vercel receives small metadata/finalization requests.
 
 ## Local setup
 
@@ -81,15 +81,35 @@ Do not substitute `drizzle-kit push`: the FTS5 table and triggers are created by
 pnpm ingest path/to/image.png
 ```
 
-The web action and CLI share size validation, SHA/dHash duplicate detection, metadata, and failure cleanup.
+The web finalization endpoint and CLI share size validation, SHA/dHash duplicate detection, metadata, and failure cleanup.
 Perceptual hashing is a heuristic and can miss or misidentify matches. The existing algorithm and threshold are retained; not every format conversion is guaranteed to match.
 After CLI ingestion, refresh open pages; the sidebar cache may require an application restart.
+
+Browser uploads require a configured passcode, including during local development. The browser hashes and uploads one file at a time. Exact duplicates skip file transfer while retaining folder/tag assignment. Failed entries can be retried with **Upload / retry**.
+
+`POST /api/uploads` requires the access cookie and same-origin requests. It issues a 15-minute ticket bound to the current shared passcode session (there are no individual accounts). The signed R2 PUT constrains the temporary key, exact length, SHA-256 checksum, content type and conditional creation. Finalization verifies the actual bytes and image format before writing permanent objects and metadata. Changing the passcode invalidates outstanding tickets. Temporary objects are removed after finalization; the daily cleanup catches abandoned uploads older than 24 hours.
+
+Configure the bucket's **CORS Policy** in Cloudflare before using the browser uploader. The production rule is:
+
+```json
+[
+  {
+    "AllowedOrigins": ["https://bits-image.vercel.app"],
+    "AllowedMethods": ["PUT"],
+    "AllowedHeaders": ["content-type", "x-amz-checksum-sha256", "if-none-match"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+For another deployment or local development, add its exact origin (for example `http://localhost:3000`) to the allowed origins. Preserve other existing rules. Do not enable public bucket access. Object read/write credentials may not have permission to edit bucket configuration.
 
 Each new upload attempt owns its storage paths, so a failed concurrent import cannot delete another request's files:
 
 - Original: `originals/<sha256>/<attempt-id>`
 - Thumbnails: `thumbs/grid/<sha256>/<attempt-id>.webp` (400px) and `thumbs/detail/…` (1200px)
 - Legacy `originals/<sha256>` paths and matching thumbnails remain supported without moving files.
+- Temporary direct uploads: `uploads/<timestamp>/<attempt-id>`; never referenced by image rows.
 
 Use the database's `r2_key` as the original path; do not derive physical paths from the hash alone.
 Failed uploads attempt to remove their own objects. If storage or database access also fails, logs identify paths requiring inspection rather than risking deletion of committed data.
@@ -110,7 +130,7 @@ A missing server secret returns 503; missing or incorrect credentials return 401
 Vercel attaches the secret to scheduled requests automatically; see the [official documentation](https://vercel.com/docs/cron-jobs/manage-cron-jobs#securing-cron-jobs).
 Other hosting environments must configure their own scheduler.
 
-Each invocation processes at most 50 images. Failures return 503 and retain retryable records. If a backlog develops, run additional authenticated invocations manually or use a hosting plan that supports more frequent scheduling.
+Each invocation processes at most 50 trashed images and 50 abandoned temporary uploads. Failures return 503 and leave failed deletions retryable. If a backlog develops, run additional authenticated invocations manually or use a hosting plan that supports more frequent scheduling.
 The first invocation also processes existing expired images. Keep secrets out of the repository and public URLs.
 
 ## Deployment and checks

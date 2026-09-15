@@ -81,7 +81,17 @@ try {
     assert((await library.text()).includes(sentinel), "Authenticated rendering must read the isolated database");
   }
   assert.equal((await request("/api/cron/purge-trash")).status, 401);
-  assert.equal((await request("/api/cron/purge-trash", { headers: { Authorization: "Bearer isolated-auth-check-secret" } })).status, 200);
+  // Valid cron execution is covered by check-audit with mocked R2.
+  const uploadRequest = (body: string, requestOrigin = origin) => request("/api/uploads", {
+    method: "POST", headers: { Cookie: cookie.split(";")[0], Origin: requestOrigin, "Content-Type": "application/json" }, body,
+  });
+  assert.equal((await uploadRequest("{}", "https://untrusted.example")).status, 403);
+  assert.equal((await uploadRequest("x".repeat(8193))).status, 413);
+  const details = { filename: "limit.png", hash: "e".repeat(64), size: 50 * 1024 * 1024 };
+  const prepared = await uploadRequest(JSON.stringify(details));
+  assert.equal(prepared.status, 200);
+  assert((await prepared.json()).ticket);
+  assert.equal((await uploadRequest(JSON.stringify({ ...details, size: details.size + 1 }))).status, 400);
   assert.equal((await request("/api/cron/purge-trash/extra")).status, 307);
   console.log("PASS: production HTML/RSC/prefetch gates, real unlock action, secure cookie, authenticated rendering, exact cron exception");
 } finally {
