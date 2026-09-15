@@ -17,7 +17,11 @@ A shared cloud image library for individuals and studios: upload, organise, sear
 
 ## Local setup
 
-Requirements: Node.js >= 20.9 (the installed Next.js minimum), pnpm, a Turso database, and an R2 bucket.
+Requirements: Node.js 24.x, pnpm 10.28.0, a Turso database, and an R2 bucket. Use the same Node major in local development, CI and Vercel. `.nvmrc` and `engines.node` record the required version; Node type declarations also use version 24.
+
+Select Node 24 with your Node version manager, then activate pnpm 10.28.0 with Corepack if available, or install that exact pnpm version. `packageManager` pins it and `.npmrc` rejects mismatched engines/package managers. These files do not replace an existing system Node installation.
+
+Dependency installation allows build scripts only for `esbuild`, `sharp`, and `unrs-resolver`, as recorded in `pnpm-workspace.yaml`. Other dependency scripts remain blocked. Install development dependencies for builds: shadcn supplies a build-time stylesheet.
 
 1. Create a Turso database and obtain its URL and access token.
 2. Create a private R2 bucket and API credentials with object read/write access to that bucket.
@@ -140,12 +144,11 @@ This application requires a Node.js server; it cannot be deployed as a static ex
 Configure the environment, migrate the target database, and then build and start:
 
 ```sh
-pnpm typecheck
-pnpm lint
-pnpm test:audit
 pnpm build
 pnpm start
 ```
+
+`pnpm build` gates compilation on `pnpm check` (zero-warning ESLint, route type generation and TypeScript) and the isolated audit tests. Vercel uses the explicit pnpm 10.28.0 install/build commands in vercel.json and must run Node 24.x. After a build, `pnpm test:auth` checks the real production server against an isolated database. See [stage 2 manual acceptance](STAGE-2-TEST-CHECKLIST.md) for remaining user-run checks.
 
 The Service Worker registers only in production mode; use build + start to check PWA installation and offline behavior.
 The build uses next/font/google and needs access to the Google Fonts service.

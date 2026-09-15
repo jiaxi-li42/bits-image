@@ -67,11 +67,18 @@ The repository build now runs the shared check command (lint with zero warnings,
 
 Static validation: the full source lint run had only the viewer pan diagnostic remaining; after its fix the viewer lint check passed with zero warnings. Route generation and TypeScript passed. Runtime/browser checks and a fresh production build are intentionally delegated to [STAGE-2-TEST-CHECKLIST.md](STAGE-2-TEST-CHECKLIST.md), following the user's quota-saving request.
 
+## S2-06: code complete; clean-install acceptance pending
+
+Declared Node 24.x and pnpm 10.28.0 engines, added .nvmrc, pinned packageManager, enabled strict install checks, and updated @types/node to 24.13.4. pnpm-workspace.yaml allows only esbuild, sharp and unrs-resolver dependency build scripts. README and SETUP now describe the same toolchain and build gate.
+
+An isolated Node 24/pnpm 10.28.0 installation successfully updated the lockfile and ran permitted esbuild install scripts. The complete pnpm check command then passed under that toolchain: zero ESLint errors/warnings, successful route generation and TypeScript. The machine's global Node installation was not changed. A fresh frozen-lockfile install, native image processing and production build remain user-run acceptance checks.
+
+Vercel installCommand and buildCommand explicitly invoke pnpm 10.28.0, using the [documented configuration overrides](https://vercel.com/docs/project-configuration/vercel-json). This makes the version and quality gate part of the repository configuration.
+
 ## Remaining sequence
 
-- S2-06: unify Node 24, matching types and version documentation; pin pnpm 10.28.0 and define native install-script policy.
 - User performs the remaining runtime checks and accepts stage 2 before stage 3 begins.
 
 ## Working notes
 
-Use pnpm 10.28.0. Production credentials remain in ignored .env.local and must not be printed. S2-01 through S2-03 are deployed; subsequent changes are local until explicitly recorded as pushed. Do not redeem reset credits.
+Use pnpm 10.28.0. Production credentials remain in ignored .env.local and must not be printed. S2-01 through S2-03 are deployed; S2-04 through S2-06 are prepared for push to master. Runtime acceptance is delegated to the user; no new live database changes are required. Do not redeem reset credits.
