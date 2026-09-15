@@ -17,12 +17,12 @@
     "db:reset": "tsx scripts/reset-db.ts"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1036.0",
-    "@aws-sdk/s3-request-presigner": "^3.1036.0",
+    "@aws-sdk/client-s3": "^3.1131.0",
+    "@aws-sdk/s3-request-presigner": "^3.1131.0",
     "@base-ui/react": "^1.4.1",
     "@hookform/resolvers": "^5.2.2",
-    "@libsql/client": "^0.17.3",
-    "@smithy/node-http-handler": "^4.6.1",
+    "@libsql/client": "^0.17.4",
+    "@smithy/node-http-handler": "^4.12.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
@@ -38,7 +38,6 @@
     "react-dropzone": "^15.0.0",
     "react-hook-form": "^7.73.1",
     "react-photo-album": "^3.6.0",
-    "shadcn": "^4.4.0",
     "sharp": "^0.35.4",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.5.0",
@@ -46,17 +45,17 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4",
-    "@types/better-sqlite3": "^7.6.13",
+    "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "dotenv": "^17.4.2",
     "drizzle-kit": "^0.31.10",
-    "eslint": "^9",
+    "eslint": "^9.39.5",
     "eslint-config-next": "16.3.5",
-    "tailwindcss": "^4",
-    "tsx": "^4.21.0",
+    "shadcn": "^4.21.0",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.23.13",
     "typescript": "^5"
   }
 }

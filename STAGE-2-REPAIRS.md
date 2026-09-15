@@ -29,9 +29,9 @@ Commit `cfbfecd` was pushed to master. Vercel marked its production deployment R
 
 Commit `9b6c558` is deployed and Ready. Its Linux build ran the isolated checks successfully, and production read-only gallery/thumbnail/download smoke checks passed.
 
-## S2-03: deployed; browser acceptance pending
+## S2-03: completed and deployed
 
-Working-tree changes implement authenticated `/api/uploads` preparation/finalization, 15-minute signed tickets bound to a hash of the current session, signed PUT length/checksum/content type/conditional creation, bounded server-side reads and SHA verification, existing ingestion/classification reuse, serial browser hashing/uploads, and daily cleanup of abandoned `uploads/` objects older than 24 hours (up to 50 per run). The obsolete full-file Server Action and 51 MB action override are removed.
+Commit a2ce22f implements authenticated `/api/uploads` preparation/finalization, 15-minute signed tickets bound to a hash of the current session, signed PUT length/checksum/content type/conditional creation, bounded server-side reads and SHA verification, existing ingestion/classification reuse, serial browser hashing/uploads, and daily cleanup of abandoned `uploads/` objects older than 24 hours (up to 50 per run). The obsolete full-file Server Action and 51 MB action override are removed.
 
 The production R2 bucket now has a CORS rule for `https://bits-image.vercel.app`, PUT only, headers `content-type`, `x-amz-checksum-sha256`, `if-none-match`, max age 3600. The bucket previously had no CORS policy. The user logged into Cloudflare; after verifying the production domain and absence of an existing policy, saving succeeded. The S3 credentials cannot read/write bucket configuration; use the logged-in Cloudflare dashboard for settings. A small synthetic signed PUT with length, checksum and If-None-Match was accepted by R2 and immediately deleted.
 
@@ -41,18 +41,30 @@ Commit `a2ce22f` is deployed and Ready (Vercel deployment `CrBZLa1CPXxCiYEACCMTv
 
 A real 52,428,800-byte synthetic PNG was PUT directly to production R2 and finalized through the production endpoint. The database dimensions/hash, original object length, both WebP thumbnails and duplicate preflight were verified. A title-comparison bug in the local test script was corrected; the application had saved the correct title. The uniquely identified test row and all three permanent objects were then removed, together with its temporary object. No existing user images were deleted. The fixture remains in ignored `backups/`, with its exact name/hash in `backups/s2-03-fixture.json`, for browser testing.
 
-Remaining S2-03 work: perform the same upload through the browser UI, confirm duplicate/retry behavior, and clean only that synthetic sample. The app is at its Verification Code screen; an asynchronous request asked the user to unlock it without sharing the passcode in chat. Tabs 6 and 7 are the production unlock page, tab 4 is Vercel, and tab 5 is Cloudflare settings. Recheck tabs/cookies on resume. Do not mark S2-03 complete or begin S2-04 before browser acceptance. All current shell validation commands completed; no test server was intentionally left running.
+Browser acceptance also passed: the UI uploaded the exact 52,428,800-byte PNG, displayed its new gallery entry, recognized a repeat upload, rejected 52,428,801 bytes, and retried only failed entries. The synthetic row and its three permanent objects were verified and removed on 2026-09-15; no user images were removed.
+
+## S2-04: code complete; manual regression pending
+
+Updated AWS client/presigner to resolved 3.1132.0, libSQL to 0.17.4, Smithy HTTP handler to 4.12.1, Tailwind/PostCSS to 4.3.3 and tsx to 4.23.13. Moved shadcn 4.21.0 to development dependencies while retaining its CSS import. Removed unused better-sqlite3 types. Refreshed vulnerable indirect dependencies within supported ranges, without forced overrides.
+
+TypeScript passed. Full audit now reports three matches (one high, two moderate), down from 93; production-only audit reports zero, down from 88. These are registry advisory matches, not an exploit assessment.
+
+| Remaining advisory | Dependency path | Applicability and decision |
+|---|---|---|
+| [esbuild development-server disclosure](https://github.com/advisories/GHSA-67mh-4wv8-2f99), moderate | drizzle-kit > @esbuild-kit/esm-loader > @esbuild-kit/core-utils > esbuild 0.18.20 | Migration tooling only. Application does not expose its development server. Retain the stable migration tool instead of forcing an incompatible loader replacement. |
+| [ip-address](https://github.com/advisories/GHSA-v2v4-37r5-5v8g), moderate | shadcn > @modelcontextprotocol/sdk > express-rate-limit 8.4.0 > ip-address 10.1.0 | Development CLI/MCP path, absent from the production dependency graph. Parent pins 10.1.0; an ordinary range refresh cannot replace it. Revisit when the parent updates. |
+| [ip-address](https://github.com/advisories/GHSA-mwp4-54f8-5fhr), high | Same shadcn path | Same applicability; do not expose the affected CLI/MCP service. No global override added. |
+
+ESLint was patched to 9.39.5; npm marks this major deprecated. ESLint 10 and TypeScript 7 remain separate major upgrades requiring plugin/API compatibility review. UI libraries unrelated to these advisory paths retain their existing versions.
+
+At the user's request, database migration checks on a disposable copy and runtime/UI regression are delegated to the manual test checklist. No new production database migrations are introduced by S2-04.
 
 ## Remaining sequence
 
-2. S2-03: implement authenticated direct-to-private-R2 uploads up to 50 MiB, followed by server-side validation and finalization; preserve deduplication, folder/tag assignment and failure cleanup. Verify expiry, ownership, size/content validation and bucket CORS without making the bucket public.
-3. S2-04: update relevant compatible/transitive packages, move shadcn to devDependencies while preserving its CSS import, remove unused better-sqlite3 types, and document residual audit findings. Avoid forced migration-tool overrides.
-4. S2-05: fix source lint issues and enforce lint, types, isolated checks and build before production promotion.
-5. S2-06: unify Node 24, matching types and version documentation; pin pnpm 10.28.0 and verify a frozen install/native dependencies.
+- S2-05: fix source lint issues and enforce lint, types, isolated checks and build before production promotion.
+- S2-06: unify Node 24, matching types and version documentation; pin pnpm 10.28.0 and define native install-script policy.
+- User performs the remaining runtime checks and accepts stage 2 before stage 3 begins.
 
-## Resume notes
+## Working notes
 
-- Check current usage before the next issue; do not redeem reset credits. This checkpoint awaits browser unlock, not a quota reset.
-- Newly installed pnpm files produced sandbox read-denial errors. Elevated executions of the same isolated checks succeeded. Use explicit `npx --yes pnpm@10.28.0` rather than the Codex pnpm 11 wrapper until S2-06 pins the toolchain.
-- Build validation set TURSO_DATABASE_URL to `file::memory:` and replaced storage/passcode variables with test values. Existing `.env.local` contains production credentials and must not be printed.
-- Production is on `a2ce22f`. Prior stage 1 database migrations and the daily R2 trash cleanup remain deployed; this release also cleans abandoned temporary uploads.
+Use pnpm 10.28.0. Production credentials remain in ignored .env.local and must not be printed. S2-01 through S2-03 are deployed; subsequent changes are local until explicitly recorded as pushed. Do not redeem reset credits.
