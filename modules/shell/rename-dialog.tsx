@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -45,9 +45,7 @@ export function RenameDialog({
   const [name, setName] = useState(initialName);
   const [pending, startTransition] = useTransition();
 
-  useEffect(() => {
-    if (!open) setName(initialName);
-  }, [open, initialName]);
+  if (!open && name !== initialName) setName(initialName);
 
   const submit = () => {
     const trimmed = name.trim();

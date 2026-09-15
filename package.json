@@ -4,17 +4,18 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "tsx scripts/check-audit.ts && next build",
+    "build": "pnpm check && pnpm test:audit && next build",
     "start": "next start",
-    "lint": "eslint",
-    "typecheck": "tsc --noEmit",
+    "lint": "eslint . --max-warnings 0",
+    "typecheck": "next typegen && tsc --noEmit",
     "test:audit": "tsx scripts/check-audit.ts",
     "test:auth": "tsx scripts/check-auth.mts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "ingest": "tsx scripts/ingest-file.ts",
-    "db:reset": "tsx scripts/reset-db.ts"
+    "db:reset": "tsx scripts/reset-db.ts",
+    "check": "pnpm lint && pnpm typecheck"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1131.0",

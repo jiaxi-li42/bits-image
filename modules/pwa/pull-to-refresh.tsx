@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { getIosDisplayMode, getServerDisplayMode, subscribeBrowserEnvironment } from "./browser-environment";
 import { useRouter } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 import { toast } from "sonner";
@@ -57,34 +58,31 @@ const DIALOG_SELECTOR =
  */
 export function PullToRefresh() {
   const router = useRouter();
-  const [enabled, setEnabled] = useState(false);
+  const enabled = useSyncExternalStore(subscribeBrowserEnvironment, getIosDisplayMode, getServerDisplayMode) === "standalone";
+  const [isTracking, setIsTracking] = useState(false);
   const [pull, setPull] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Gesture state lives in refs because the listeners are bound once and
-  // we don't want every move to schedule a React re-render of the
-  // tracking flag. Only `pull` (the visible distance) is React state.
+  // Refs keep native handlers current; state drives the visible indicator
+  // and its transition when tracking begins or ends.
   const tracking = useRef(false);
   const startY = useRef(0);
   const pullRef = useRef(0);
   const refreshingRef = useRef(false);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const ua = window.navigator.userAgent;
-    const isIos = /iPad|iPhone|iPod/.test(ua) && !("MSStream" in window);
-    const isStandalone =
-      window.matchMedia("(display-mode: standalone)").matches ||
-      (navigator as unknown as { standalone?: boolean }).standalone === true;
-    if (isIos && isStandalone) setEnabled(true);
-  }, []);
-
-  useEffect(() => {
     if (!enabled) return;
+    let refreshTimer: number | undefined;
+    const cancel = () => {
+      tracking.current = false;
+      setIsTracking(false);
+      pullRef.current = 0;
+      setPull(0);
+    };
 
     const onTouchStart = (e: TouchEvent) => {
       if (refreshingRef.current) return;
-      if (e.touches.length !== 1) return;
+      if (e.touches.length !== 1) { cancel(); return; }
       const target = e.target as Element | null;
       // Pulls that begin inside a dialog / menu / viewer belong to that
       // surface — never hijack them for refresh.
@@ -93,19 +91,18 @@ export function PullToRefresh() {
       // the user's intent is to scroll, not to refresh.
       if (window.scrollY > 0) return;
       tracking.current = true;
+      setIsTracking(true);
       startY.current = e.touches[0].clientY;
     };
 
     const onTouchMove = (e: TouchEvent) => {
       if (!tracking.current) return;
+      if (e.touches.length !== 1) { cancel(); return; }
       const delta = e.touches[0].clientY - startY.current;
       if (delta <= 0) {
         // Reversed direction — collapse and stop tracking until the next
         // touch sequence so we don't fight an upward scroll.
-        if (pullRef.current !== 0) {
-          pullRef.current = 0;
-          setPull(0);
-        }
+        cancel();
         return;
       }
       // Killing the default suppresses iOS' rubber-band so our indicator
@@ -119,6 +116,7 @@ export function PullToRefresh() {
     const finish = () => {
       if (!tracking.current) return;
       tracking.current = false;
+      setIsTracking(false);
       if (pullRef.current >= TRIGGER_PX) {
         refreshingRef.current = true;
         setRefreshing(true);
@@ -128,17 +126,16 @@ export function PullToRefresh() {
         pullRef.current = TRIGGER_PX;
         setPull(TRIGGER_PX);
         router.refresh();
-        // `router.refresh()` is fire-and-forget with no completion hook,
-        // so we pin the spinner for a fixed beat. Long enough to feel
-        // intentional, short enough that the data is realistically back.
-        window.setTimeout(() => {
+        // ponytail: 700 ms acknowledges the request, not server completion.
+        // Use transition pending state if completion tracking is needed.
+        refreshTimer = window.setTimeout(() => {
           refreshingRef.current = false;
           setRefreshing(false);
           pullRef.current = 0;
           setPull(0);
           // Bottom-center toast — visible feedback that something
           // actually happened, since the spinner has just faded away.
-          toast("Page refreshed");
+          toast("Refresh requested");
         }, 700);
       } else {
         pullRef.current = 0;
@@ -149,12 +146,13 @@ export function PullToRefresh() {
     document.addEventListener("touchstart", onTouchStart, { passive: true });
     document.addEventListener("touchmove", onTouchMove, { passive: false });
     document.addEventListener("touchend", finish, { passive: true });
-    document.addEventListener("touchcancel", finish, { passive: true });
+    document.addEventListener("touchcancel", cancel, { passive: true });
     return () => {
+      window.clearTimeout(refreshTimer);
       document.removeEventListener("touchstart", onTouchStart);
       document.removeEventListener("touchmove", onTouchMove);
       document.removeEventListener("touchend", finish);
-      document.removeEventListener("touchcancel", finish);
+      document.removeEventListener("touchcancel", cancel);
     };
   }, [enabled, router]);
 
@@ -187,7 +185,7 @@ export function PullToRefresh() {
           opacity: visible ? progress : 0,
           backdropFilter: `blur(${blur}px) saturate(1.1)`,
           WebkitBackdropFilter: `blur(${blur}px) saturate(1.1)`,
-          transition: tracking.current
+          transition: isTracking
             ? "none"
             : `opacity ${TRANSITION_MS}ms cubic-bezier(0.32, 0.72, 0, 1), backdrop-filter ${TRANSITION_MS}ms, -webkit-backdrop-filter ${TRANSITION_MS}ms`,
         }}
@@ -201,7 +199,7 @@ export function PullToRefresh() {
         style={{
           transform: `translateY(calc(env(safe-area-inset-top) + ${Math.max(0, pull - 28)}px))`,
           opacity: visible ? 1 : 0,
-          transition: tracking.current
+          transition: isTracking
             ? "none"
             : `transform ${TRANSITION_MS}ms cubic-bezier(0.32, 0.72, 0, 1), opacity ${TRANSITION_MS}ms`,
         }}
@@ -217,7 +215,7 @@ export function PullToRefresh() {
                 ? undefined
                 : {
                     transform: `rotate(${rotation}deg)`,
-                    transition: tracking.current
+                    transition: isTracking
                       ? "none"
                       : `transform ${TRANSITION_MS}ms`,
                   }

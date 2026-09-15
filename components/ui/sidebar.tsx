@@ -248,7 +248,7 @@ function SidebarTrigger({
 }
 
 // Stub kept to preserve the shadcn API surface. Icon-rail isn't implemented.
-function SidebarRail(_props: React.ComponentProps<"button">) {
+function SidebarRail() {
   return null;
 }
 
@@ -500,10 +500,7 @@ function SidebarMenuSkeleton({
   showIcon = false,
   ...props
 }: React.ComponentProps<"div"> & { showIcon?: boolean }) {
-  const width = React.useMemo(
-    () => `${Math.floor(Math.random() * 40) + 50}%`,
-    [],
-  );
+  const width = "70%";
   return (
     <div
       data-slot="sidebar-menu-skeleton"

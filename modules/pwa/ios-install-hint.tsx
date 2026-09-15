@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useSyncExternalStore } from "react";
+import { getIosDisplayMode, subscribeBrowserEnvironment } from "./browser-environment";
 import { Share } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,6 +14,17 @@ import {
 
 const DISMISSED_KEY = "pwa-ios-hint-dismissed";
 
+function getShowHint() {
+  if (getIosDisplayMode() !== "browser") return false;
+  try {
+    return window.localStorage.getItem(DISMISSED_KEY) !== "1";
+  } catch {
+    return true;
+  }
+}
+
+const getServerHint = () => false;
+
 /**
  * Floating banner shown on iOS Safari instructing the user to install
  * the app via the Share menu. Hidden when:
@@ -24,40 +36,19 @@ const DISMISSED_KEY = "pwa-ios-hint-dismissed";
  * flash of the banner.
  */
 export function IosInstallHint() {
-  // null = "still detecting"; boolean = decided.
-  const [show, setShow] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const ua = window.navigator.userAgent;
-    const isIos = /iPad|iPhone|iPod/.test(ua) && !("MSStream" in window);
-    if (!isIos) {
-      setShow(false);
-      return;
-    }
-
-    // matchMedia covers most browsers; navigator.standalone is the iOS
-    // legacy flag still used by Safari when launched from the Home
-    // Screen — both are checked so we don't nag installed users.
-    const isStandalone =
-      window.matchMedia("(display-mode: standalone)").matches ||
-      (navigator as unknown as { standalone?: boolean }).standalone === true;
-    if (isStandalone) {
-      setShow(false);
-      return;
-    }
-
-    const dismissed = window.localStorage.getItem(DISMISSED_KEY) === "1";
-    setShow(!dismissed);
-  }, []);
+  const show = useSyncExternalStore(subscribeBrowserEnvironment, getShowHint, getServerHint);
+  const [dismissed, setDismissed] = useState(false);
 
   const dismiss = () => {
-    window.localStorage.setItem(DISMISSED_KEY, "1");
-    setShow(false);
+    try {
+      window.localStorage.setItem(DISMISSED_KEY, "1");
+    } catch {
+      // Storage may be blocked; dismissal still works for this page visit.
+    }
+    setDismissed(true);
   };
 
-  if (!show) return null;
+  if (!show || dismissed) return null;
 
   return (
     <Card

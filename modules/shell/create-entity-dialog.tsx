@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -50,9 +50,7 @@ export function CreateEntityDialog({
 
   // base-ui doesn't fire onOpenChange when consumers set `open` externally
   // (e.g. via Cancel), so reset on every transition to closed.
-  useEffect(() => {
-    if (!open) setName("");
-  }, [open]);
+  if (!open && name !== "") setName("");
 
   const submit = () => {
     const trimmed = name.trim();

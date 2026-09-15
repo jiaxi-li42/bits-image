@@ -1,4 +1,3 @@
-/* eslint-disable */
 // Service worker for Bits Image.
 //
 // Goals (locked in during planning):

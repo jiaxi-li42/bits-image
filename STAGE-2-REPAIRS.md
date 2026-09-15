@@ -59,9 +59,16 @@ ESLint was patched to 9.39.5; npm marks this major deprecated. ESLint 10 and Typ
 
 At the user's request, database migration checks on a disposable copy and runtime/UI regression are delegated to the manual test checklist. No new production database migrations are introduced by S2-04.
 
+## S2-05: code complete; interaction acceptance pending
+
+Removed the reported source diagnostics without disabling React hook rule families. Closed dialogs reset their own guarded state; the shared detail editor keys its form by image ID. Folder expansion and tag-filter state update with route changes. Both PWA features subscribe to browser state, and pull-to-refresh renders tracking from state rather than reading refs during render. Cancelled/multi-touch gestures stop tracking. Viewer state resets by image ID, and pan correction uses post-layout DOM bounds before paint. Thumbnail img elements retain two narrow, documented lint exceptions.
+
+The repository build now runs the shared check command (lint with zero warnings, route generation and TypeScript), then the isolated audit checks, then Next.js compilation. ESLint and TypeScript exclude local backup/store artifacts. Next route types use the [documented typegen command](https://nextjs.org/docs/app/api-reference/cli/next#next-typegen-options). The installed documentation directory was no longer present after package refresh, so the official Next.js documentation was used.
+
+Static validation: the full source lint run had only the viewer pan diagnostic remaining; after its fix the viewer lint check passed with zero warnings. Route generation and TypeScript passed. Runtime/browser checks and a fresh production build are intentionally delegated to [STAGE-2-TEST-CHECKLIST.md](STAGE-2-TEST-CHECKLIST.md), following the user's quota-saving request.
+
 ## Remaining sequence
 
-- S2-05: fix source lint issues and enforce lint, types, isolated checks and build before production promotion.
 - S2-06: unify Node 24, matching types and version documentation; pin pnpm 10.28.0 and define native install-script policy.
 - User performs the remaining runtime checks and accepts stage 2 before stage 3 begins.
 

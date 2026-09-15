@@ -46,7 +46,11 @@ export type DetailEditorProps = {
   onClose?: () => void;
 };
 
-export function DetailEditor({
+export function DetailEditor(props: DetailEditorProps) {
+  return <DetailEditorForm key={props.imageId} {...props} />;
+}
+
+function DetailEditorForm({
   imageId,
   view = "library",
   className,
@@ -70,7 +74,6 @@ export function DetailEditor({
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
     getImageMeta(imageId).then((meta) => {
       if (cancelled) return;
       if (meta) {

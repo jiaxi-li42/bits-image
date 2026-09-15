@@ -29,15 +29,21 @@ export function TagFilterBar({ excludeTagId }: { excludeTagId?: string }) {
   const [open, setOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [mode, setMode] = useState<"and" | "or">("and");
+  const [previousPath, setPreviousPath] = useState(pathname);
+  if (previousPath !== pathname) {
+    setPreviousPath(pathname);
+    setSelectedIds([]);
+    setMode("and");
+    setOpen(false);
+  }
 
   // Filter is session-only. On mount (and whenever the route changes) strip
   // any persisted ?tags / ?mode from the URL and reset local state. Selecting
   // tags during the session still updates the URL via update() — but a hard
   // refresh or fresh navigation always starts clean.
   //
-  // Both the URL strip and the state reset must happen here together: a
-  // separate URL-sync effect would read the still-stale URL before
-  // router.replace lands and re-populate state from the persisted params.
+  // Reset local state during the route change above; this effect only
+  // synchronizes the URL. Do not read stale URL filters back into state.
   useEffect(() => {
     const sp = new URLSearchParams(window.location.search);
     if (sp.has("tags") || sp.has("mode")) {
@@ -46,10 +52,7 @@ export function TagFilterBar({ excludeTagId }: { excludeTagId?: string }) {
       const qs = sp.toString();
       router.replace(`${pathname}${qs ? `?${qs}` : ""}`, { scroll: false });
     }
-    setSelectedIds([]);
-    setMode("and");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathname]);
+  }, [pathname, router]);
 
   // Sync state from URL on browser back/forward only.
   useEffect(() => {

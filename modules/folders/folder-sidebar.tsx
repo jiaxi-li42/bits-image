@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import { ChevronDown, ChevronRight, Folder as FolderIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -64,20 +64,12 @@ export function FolderSidebar({
   // When the route changes (e.g. clicking a deep folder), open the chain
   // leading to it so it stays visible. Manual collapses are preserved
   // because we only add — we never remove.
-  useEffect(() => {
-    if (ancestorChain.length === 0) return;
-    setExpanded((prev) => {
-      let changed = false;
-      const next = new Set(prev);
-      for (const id of ancestorChain) {
-        if (!next.has(id)) {
-          next.add(id);
-          changed = true;
-        }
-      }
-      return changed ? next : prev;
-    });
-  }, [ancestorChain]);
+  const routeChain = JSON.stringify([activeId, ...ancestorChain]);
+  const [previousChain, setPreviousChain] = useState(routeChain);
+  if (routeChain !== previousChain) {
+    setPreviousChain(routeChain);
+    setExpanded(new Set([...expanded, ...ancestorChain]));
+  }
 
   const isVisible = (f: FolderNode): boolean => {
     let cur = f.parentId;

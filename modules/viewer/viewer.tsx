@@ -116,28 +116,29 @@ export function Viewer({
   const safeIndex = Math.min(index, Math.max(0, total - 1));
   const current = images[safeIndex];
 
-  // Clamp index when the underlying array shrinks (image moved to trash, etc).
+  // Adjust local state before committing a different active image.
+  if (index !== safeIndex) setIndex(safeIndex);
+  const [previousImageId, setPreviousImageId] = useState(current?.id);
+  if (previousImageId !== current?.id) {
+    setPreviousImageId(current?.id);
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+    setFullscreen(false);
+    setIsDragging(false);
+  }
+
+  // Closing notifies the parent after commit.
   useEffect(() => {
     if (total === 0) {
       onClose("");
       return;
     }
-    if (index > total - 1) {
-      setIndex(total - 1);
-    }
-  }, [total, index, onClose]);
+  }, [total, onClose]);
 
   const closeWithCurrent = useCallback(() => {
     if (current) onClose(current.id);
     else onClose("");
   }, [current, onClose]);
-
-  // Reset zoom/pan/fullscreen whenever the active image changes.
-  useEffect(() => {
-    setZoom(1);
-    setPan({ x: 0, y: 0 });
-    setFullscreen(false);
-  }, [safeIndex]);
 
   // The mobile slide is `overflow-y-auto` so the editor below the image
   // can be reached on tall images. When the user enters fullscreen the
@@ -268,14 +269,14 @@ export function Viewer({
     [],
   );
 
-  // Re-clamp pan when zoom changes so wheel/button zoom doesn't strand the
-  // image off-screen, and snap to origin at 1×.
-  useEffect(() => {
-    if (zoom === 1) {
-      setPan({ x: 0, y: 0 });
-      return;
+  // Measure after the mobile overlay mounts, before paint. Its bounds can
+  // differ from the in-flow stage used by the initiating gesture.
+  useLayoutEffect(() => {
+    const next = zoom === 1 ? { x: 0, y: 0 } : clampPan(panRef.current, zoom);
+    if (next.x !== panRef.current.x || next.y !== panRef.current.y) {
+      panRef.current = next;
+      setPan(next);
     }
-    setPan((p) => clampPan(p, zoom));
   }, [zoom, clampPan]);
 
   const goPrev = useCallback(() => {
@@ -697,7 +698,11 @@ export function Viewer({
         type="button"
         variant="ghost"
         size="icon"
-        onClick={stopAnd(fullscreen ? exitFullscreen : closeWithCurrent)}
+        onClick={(event) => {
+          event.stopPropagation();
+          if (fullscreen) exitFullscreen();
+          else closeWithCurrent();
+        }}
         aria-label={fullscreen ? "Exit fullscreen" : "Close"}
         className="absolute top-3 left-3 z-[60] size-9 rounded-md bg-foreground/70 text-background shadow-sm hover:bg-foreground/80 hover:text-background md:hidden"
       >
@@ -848,6 +853,8 @@ export function Viewer({
           ref={overlayRef}
           className="pointer-events-auto absolute inset-0 z-[55] flex items-center justify-center md:hidden"
         >
+          {/* Pre-generated authenticated R2 thumbnail; retain native geometry for zoom. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={`/api/img/detail/${current.hash}`}
             alt={current.title ?? ""}
@@ -931,6 +938,8 @@ const Slide = memo(function Slide({
             { "--image-ar": `${img.width} / ${img.height}` } as React.CSSProperties
           }
         >
+          {/* Pre-generated authenticated R2 thumbnail; retain native geometry for zoom. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={`/api/img/detail/${img.hash}`}
             alt={img.title ?? ""}
