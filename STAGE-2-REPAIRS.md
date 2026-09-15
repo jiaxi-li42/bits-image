@@ -29,7 +29,7 @@ Commit `cfbfecd` was pushed to master. Vercel marked its production deployment R
 
 Commit `9b6c558` is deployed and Ready. Its Linux build ran the isolated checks successfully, and production read-only gallery/thumbnail/download smoke checks passed.
 
-## S2-03: implemented and locally verified; production validation pending
+## S2-03: deployed; browser acceptance pending
 
 Working-tree changes implement authenticated `/api/uploads` preparation/finalization, 15-minute signed tickets bound to a hash of the current session, signed PUT length/checksum/content type/conditional creation, bounded server-side reads and SHA verification, existing ingestion/classification reuse, serial browser hashing/uploads, and daily cleanup of abandoned `uploads/` objects older than 24 hours (up to 50 per run). The obsolete full-file Server Action and 51 MB action override are removed.
 
@@ -37,9 +37,11 @@ The production R2 bucket now has a CORS rule for `https://bits-image.vercel.app`
 
 Isolation checks passed for five image formats, ticket tampering/expiry/session ownership, size/checksum rejection, concurrent finalization, folder/tag assignment, duplicate preflight and temporary cleanup. Build, TypeScript, changed-file ESLint and the production-server authentication/Origin/metadata-size/50 MiB-boundary checks passed. Next.js normalizes loopback hostnames in nextUrl; the Origin comparison retains the actual HTTP Host. Failed browser entries can be retried without selecting files again. README/SETUP document the upload flow, CORS and cleanup.
 
-Remaining S2-03 work: verify deployment, perform an actual 50 MiB browser upload, confirm duplicate handling and cleanup of its uniquely identified synthetic data. The ignored `backups/s2-03-fixture.json` records the generated 52,428,800-byte PNG's name and SHA-256. Do not mark S2-03 complete or begin S2-04 before this verification.
+Commit `a2ce22f` is deployed and Ready (Vercel deployment `CrBZLa1CPXxCiYEACCMTvDF8uaFB`). Read-only gallery, thumbnail, download and authentication smoke checks passed. The live upload endpoint accepted 50 MiB metadata; R2 CORS preflight returned 204 for the production origin and did not permit an unrelated origin.
 
-Quota checkpoint: 2026-09-14 evening, 4% remained. Next reported reset is 2026-09-15 01:20:17 UTC (02:20:17 Europe/London). Current shell validation session was 34727. The previous lint/audit session 13815 completed the audit successfully but reported test type narrowing errors that were subsequently fixed. Session 80216 had the pre-fix Origin assertion failure. Browser tab 5 is the authenticated Cloudflare bucket settings page; tab 4 is Vercel. Recheck actual state on resume.
+A real 52,428,800-byte synthetic PNG was PUT directly to production R2 and finalized through the production endpoint. The database dimensions/hash, original object length, both WebP thumbnails and duplicate preflight were verified. A title-comparison bug in the local test script was corrected; the application had saved the correct title. The uniquely identified test row and all three permanent objects were then removed, together with its temporary object. No existing user images were deleted. The fixture remains in ignored `backups/`, with its exact name/hash in `backups/s2-03-fixture.json`, for browser testing.
+
+Remaining S2-03 work: perform the same upload through the browser UI, confirm duplicate/retry behavior, and clean only that synthetic sample. The app is at its Verification Code screen; an asynchronous request asked the user to unlock it without sharing the passcode in chat. Tabs 6 and 7 are the production unlock page, tab 4 is Vercel, and tab 5 is Cloudflare settings. Recheck tabs/cookies on resume. Do not mark S2-03 complete or begin S2-04 before browser acceptance. All current shell validation commands completed; no test server was intentionally left running.
 
 ## Remaining sequence
 
@@ -50,8 +52,7 @@ Quota checkpoint: 2026-09-14 evening, 4% remained. Next reported reset is 2026-0
 
 ## Resume notes
 
-- Paused after local S2-01 validation because the five-hour window had 7% remaining. Reported reset: 2026-09-14 20:18:54 UTC (21:18:54 Europe/London).
-- A one-run thread heartbeat is scheduled for 21:20 Europe/London under `resume-bits-image-stage-2-repairs`. Check current usage again when it runs; do not redeem reset credits.
+- Check current usage before the next issue; do not redeem reset credits. This checkpoint awaits browser unlock, not a quota reset.
 - Newly installed pnpm files produced sandbox read-denial errors. Elevated executions of the same isolated checks succeeded. Use explicit `npx --yes pnpm@10.28.0` rather than the Codex pnpm 11 wrapper until S2-06 pins the toolchain.
 - Build validation set TURSO_DATABASE_URL to `file::memory:` and replaced storage/passcode variables with test values. Existing `.env.local` contains production credentials and must not be printed.
-- Production remains on commit 4349a75 until the pending push/deployment. Prior stage 1 database migrations and the daily R2 trash cleanup remain deployed.
+- Production is on `a2ce22f`. Prior stage 1 database migrations and the daily R2 trash cleanup remain deployed; this release also cleans abandoned temporary uploads.
